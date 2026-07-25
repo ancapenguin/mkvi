@@ -33,8 +33,10 @@ jobs:
           $keyPath = Join-Path $env:RUNNER_TEMP 'mkvi-updates'
           Set-Content -Path $keyPath -Value $env:MKVI_UPDATES_DEPLOY_KEY -NoNewline
           icacls $keyPath /inheritance:r /grant:r "$env:USERNAME`:(R)" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.ssh" | Out-Null
           ssh-keyscan github.com | Out-File -Append -Encoding ascii "$env:USERPROFILE\.ssh\known_hosts"
-          $env:GIT_SSH_COMMAND = "ssh -i `"$keyPath`" -o IdentitiesOnly=yes"
+          $keyForSsh = $keyPath.Replace('\', '/')
+          $env:GIT_SSH_COMMAND = "ssh -i `"$keyForSsh`" -o IdentitiesOnly=yes"
           git clone git@github.com:ancapenguin/mkvi-updates.git update-feed
           $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
           $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
