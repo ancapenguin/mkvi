@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mkvi-signal",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-25",
+  "durable_objects": {
+    "bindings": [
+      { "name": "PAIRING_ROOM", "class_name": "PairingRoom" },
+      { "name": "PEER_RENDEZVOUS", "class_name": "PeerRendezvous" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PairingRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["PeerRendezvous"] }
+  ]
+}

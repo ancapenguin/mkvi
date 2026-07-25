@@ -1,0 +1,52 @@
+name: Publish signed update
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-windows-update:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build signed updater
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build
+      - name: Publish public update feed
+        shell: pwsh
+        env:
+          MKVI_UPDATES_DEPLOY_KEY: ${{ secrets.MKVI_UPDATES_DEPLOY_KEY }}
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP 'mkvi-updates'
+          Set-Content -Path $keyPath -Value $env:MKVI_UPDATES_DEPLOY_KEY -NoNewline
+          icacls $keyPath /inheritance:r /grant:r "$env:USERNAME`:(R)" | Out-Null
+          ssh-keyscan github.com | Out-File -Append -Encoding ascii "$env:USERPROFILE\.ssh\known_hosts"
+          $env:GIT_SSH_COMMAND = "ssh -i `"$keyPath`" -o IdentitiesOnly=yes"
+          git clone git@github.com:ancapenguin/mkvi-updates.git update-feed
+          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
+          $signature = (Get-Content ($source + '.sig') -Raw).Trim()
+          New-Item -ItemType Directory -Force -Path update-feed\windows-x86_64 | Out-Null
+          Copy-Item $source update-feed\windows-x86_64\
+          Copy-Item ($source + '.sig') update-feed\windows-x86_64\
+          $metadata = @{ version = $version; notes = "MKVI $version"; pub_date = (Get-Date).ToUniversalTime().ToString('o'); platforms = @{ 'windows-x86_64' = @{ url = "https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_$($version)_x64-setup.exe"; signature = $signature } } } | ConvertTo-Json -Depth 5
+          Set-Content -Path update-feed\latest.json -Value $metadata -NoNewline
+          Set-Location update-feed
+          git config user.name 'MKVI updater'
+          git config user.email 'actions@github.com'
+          git add latest.json windows-x86_64
+          git commit -m "Publish MKVI $version"
+          git push
