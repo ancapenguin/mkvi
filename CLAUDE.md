@@ -105,7 +105,26 @@ tek bir yeniden deneme kodu 15 dakikalığına ölü hale getiriyordu. `MAX_ADMI
 düzeltildi (`cloudflare/src/index.ts`), Worker yayına alındı ve canlı doğrulandı (4/4 yeniden
 bağlanma başarılı). **Bu sunucu tarafı bir düzeltmedir; istemci güncellemesi gerektirmez.**
 
+**ÇÖZÜLEN KÖK NEDEN 2 — asıl katil:** Rust, açık anahtarı ve imzayı `STANDARD_NO_PAD` ile
+kodluyor (`security.rs:108`, `lib.rs:26`) — yani alfabede `+` ve `/` var. Worker ise
+base64url bekliyordu (`/^[A-Za-z0-9_-]{86}$/`). İçinde `+` veya `/` geçen her imza
+`close(1008, "Disallowed signaling envelope")` yiyordu; 86 karakterlik bir imzanın buna
+takılmama şansı `(62/64)^86` ≈ %7. Yani eşleştirmelerin ~%93'ü kimlik alışverişinde sessizce
+ölüyordu ve kullanıcı sadece "Kodu oluşturan cihazın bağlantıyı başlatması bekleniyor."
+ekranında kalıyordu. Worker'da `KEY_B64` / `SIGNATURE_B64` her iki alfabeyi de kabul edecek
+şekilde genişletildi (daraltma değil — eski istemciler kırılmaz), yayına alındı
+(`c7abefd4`), iki istemcili canlı testle doğrulandı.
+**İstemci tarafını DEĞİŞTİRME:** Rust'ı base64url'e çevirmek kayıtlı eşlerin `public_key`
+temsilini değiştirir ve mevcut eşleşmeleri bozar.
+
 **Sonra sırayla:**
+
+-1. **İLK İŞ — regresyon testi yaz.** Yukarıdaki iki kusur da (`admitted` sayacı ve alfabe
+   uyuşmazlığı) tip kontrolünden ve mevcut 38 testten sağ çıktı; çünkü Worker'ın
+   `isSignalPayload`/`isRelayEnvelope` fonksiyonlarının **hiç testi yok**. `cloudflare/`
+   paketine vitest ekle ve en az şunları kilitle: standart alfabeli (`+`,`/`) 43/86 karakterlik
+   kimlik zarfı KABUL edilir; yanlış uzunluk reddedilir; aynı kodla 3+ yeniden bağlanma
+   çalışır. Bu olmadan bir sonraki protokol dokunuşu aynı sessiz kırılmayı üretir.
 
 1. **Gerçek uçtan uca dosya testi yapılmadı.** `file_sink_*` komutları yalnızca birim
    testleriyle doğrulandı; iki cihaz arasında büyük (≥100 MB) bir dosya hiç aktarılmadı.

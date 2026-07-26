@@ -7,6 +7,16 @@ const CODE = /^[A-HJ-NP-Z2-9]{13,16}$/;
 // 32 random bytes, base64url encoded. This is an unguessable bearer capability,
 // not a user identifier. A pair derives and stores it locally after SAS approval.
 const OPAQUE_ID = /^[A-Za-z0-9_-]{43}$/;
+/**
+ * Ed25519 key material is encoded on the Rust side with the STANDARD base64
+ * alphabet ("+" and "/"), while the browser-generated rendezvous ids use
+ * base64url ("-" and "_"). Both alphabets are accepted here because this is a
+ * shape check only: authenticity is decided by the Ed25519 verification each
+ * peer performs locally. Requiring base64url alone silently dropped roughly
+ * every identity envelope and left pairing stuck forever.
+ */
+const KEY_B64 = /^[A-Za-z0-9+/_-]{43}$/;
+const SIGNATURE_B64 = /^[A-Za-z0-9+/_-]{86}$/;
 const PEER_TTL_MS = 30 * 24 * 60 * 60_000;
 /**
  * Admissions are counted but never released, so this is a retry budget rather than
@@ -117,8 +127,8 @@ function isSignalPayload(value: unknown): boolean {
   }
   if (payload.kind === "identity") {
     return keys.every((key) => key === "kind" || key === "publicKey" || key === "signature")
-      && typeof payload.publicKey === "string" && OPAQUE_ID.test(payload.publicKey)
-      && typeof payload.signature === "string" && /^[A-Za-z0-9_-]{86}$/.test(payload.signature);
+      && typeof payload.publicKey === "string" && KEY_B64.test(payload.publicKey)
+      && typeof payload.signature === "string" && SIGNATURE_B64.test(payload.signature);
   }
   if (payload.kind !== "ice" || keys.length !== 2 || !keys.includes("candidate") || typeof payload.candidate !== "object" || payload.candidate === null || Array.isArray(payload.candidate)) return false;
   const candidate = payload.candidate as Record<string, unknown>;
