@@ -68,6 +68,7 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 - **0.1.1 sürüm yükseltmesi + pairing yarış düzeltmesi:** kodu oluşturan taraf artık kimliğini karşı taraf odaya girmeden önce yayınlamıyor (`beginCreatorHandshake`, `src/App.tsx`).
 - **2026-07-26 — inceleme bulguları temizliği:** `peer-transport.ts`'teki 5 mojibake Türkçe string onarıldı; Worker'ın `identity` zarfından ölü `rendezvous` alanı kaldırıldı (`signaling.ts` tipiyle birlikte); `App.tsx`'te her render'da `RendezvousClient` üreten ref lazy hale getirildi; `parseControl`/`safeName`/`safeMime` export edilip 22 yeni birim testi eklendi (suite 4 → 26).
 - **2026-07-26 — inceleme kapanışı:** dosya alımı akışlı hale getirildi (Rust `file_sink_*` komutları + `src/services/file-sink.ts`; WebView belleği 4 MB ile sınırlı, hedef yolu Rust seçiyor), güncelleme installer'ları GitHub Releases'e taşındı (feed reposuna artık sadece `latest.json` commit'leniyor), CSP daraltıldı (`https:` joker kaldırıldı, `object-src`/`frame-src`/`form-action` kapatıldı), `listPeers()` → `loadKnownPeer()` ile tek eşe daraltıldı ve `peerName` artık kayıttan geliyor. Suite 26 → 30 TS, 3 → 6 Rust.
+- **2026-07-26 — ayarlanabilir ICE:** `src/domain/ice.ts` + ayarlar panelinde ICE sunucusu alanı. Koda hiçbir TURN sağlayıcısı gömülmedi; alan boşken davranış eskisiyle birebir aynı (yalnız STUN, saf P2P). Kullanıcı kendi TURN sunucusunu kurmama kararı aldı — alan, ileride gerek olursa yeni sürüm derlemeden çözüm yapıştırabilmek için var.
 - **Faz 6 (Android denemesi) ve Faz 7 (sertleştirme) başlamadı.**
 
 ---
@@ -82,6 +83,13 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 **Durum:** Tam gate YEŞİL — `npx tsc --noEmit` temiz, `npm test` 30/30, `cargo test` 6/6,
 `cloudflare && npm run check` dry-run başarılı. İnceleme listesinin **6 maddesinin tamamı kapandı**.
 Çalışma ağacında **commit edilmemiş** değişiklikler var.
+
+**KURULUM/DAĞITIM DURUMU (kullanıcı sordu, cevap burada dursun):**
+GitHub Releases **boş** — `v0.1.0` ve `v0.1.1` tag push'larının ikisi de başarısız oldu; sadece
+26 Tem 19:09'daki `workflow_dispatch` çalışması feed'e yükledi. Bugün çalışan tek indirme linki:
+`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.1_x64-setup.exe`
+(HTTP 200, 3.61 MB doğrulandı). Worker canlı — `/` adresine `426 Upgrade Required` dönmesi
+normaldir, yalnızca WebSocket kabul ettiği anlamına gelir.
 
 **İLK İŞ:** Çalışma ağacını tek commit olarak kaydet —
 `src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json`, `src/domain/peer-transport.ts`,
@@ -119,6 +127,10 @@ Commit'ten sonra **push etme**, kullanıcıya sor.
 - **Flutter/UI yeniden yazımı gündemde.** Kullanıcı Tauri'nin Windows dışında sorun
   çıkaracağından endişeli; "çekirdek Rust kalsın, UI Flutter olsun" fikrini attı, acelesi yok.
   Bu Faz 6'nın (`ARCHITECTURE.md:41`) asıl karar noktası. Karar verilmeden UI'a büyük yatırım yapma.
+- **TURN kararı: kendi sunucumuzu KURMUYORUZ.** Kullanıcı önce "kuralım" dedi, sonra vazgeçti
+  (hız ve uğraş gerekçesiyle). Cloudflare Realtime TURN de reddedildi (0,05 USD/GB, SFU'suz ücretli).
+  Bu yüzden kod tarafında yalnızca **ayarlanabilir alan** var, sunucu yok. **Bunu yeniden açma;**
+  ancak kuzenle yapılan gerçek deneme "ifade ekranı geldi ama bağlanmadı" ile sonuçlanırsa gündeme gelir.
 
 **Bilinen tuzaklar:**
 
