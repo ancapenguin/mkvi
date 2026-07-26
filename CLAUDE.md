@@ -121,6 +121,25 @@ artık `deferred` kuyruğunda bekleyip doğrulama bitince işleniyor.
 **TUZAK:** `online` sayacı bu odada *kendini de sayar* (`PeerRendezvous.onlineDevices`), eşin
 var olması `online > 1` demektir. `PairingRoom` ise farklı semantik kullanır — karıştırma.
 
+**ÇÖZÜLEN KÖK NEDEN 2 — asıl fail muhtemelen buydu (`c411f48`):** `keyring 3` hiçbir
+varsayılan özellik getirmiyor ve platform arka ucu seçilmezse **sessizce bellek içi mock
+store'a** düşüyor ([docs.rs/keyring/3.6.3](https://docs.rs/keyring/3.6.3/keyring/)). Üç yoldan
+doğrulandı: `Cargo.lock`'ta keyring'in tek bağımlılıkları `log` + `zeroize` idi,
+`cargo tree -e features -i keyring` yalnızca boş `default`'u gösteriyordu, resmî doküman
+davranışı yazıyor. Sonuç: cihaz kimliği ve SQLite anahtarı **hiç diske yazılmıyordu**; her
+açılışta yenisi üretiliyor, kayıtlı eş çözülemiyor, uygulama kod ekranına dönüyordu.
+`Cargo.toml`'da artık platform başına açık arka uç var. **Yeniden bağlanma hâlâ bozuksa önce
+bunun gerçekten düzeldiğini doğrula** (uygulamayı kapat-aç, aynı kimlikle mi geliyor).
+
+**AÇIK GÜVENLİK BULGUSU — sürüm engelleyici sayılmalı:** SAS ifadesi yalnızca
+`transcript | sıralı Ed25519 açık anahtarlar` özeti (`src/App.tsx`, `handleIdentity`). SDP'yi,
+**DTLS sertifika parmak izlerini** ve efemer WebRTC anahtarlarını hiç bağlamıyor. Kötü niyetli
+bir sinyalleşme sunucusu (yani Worker'ı kontrol eden) her iki tarafın SDP'sini değiştirip
+Alice↔saldırgan ve saldırgan↔Bob şeklinde iki bağlantı kurabilir; kimlik mesajlarını olduğu
+gibi aktarır ve **iki tarafta da aynı SAS görünür**. DTLS her bacağı ayrı ayrı korur, uçtan uca
+korumaz. Çözüm: SAS'i DTLS parmak izlerini de kapsayacak şekilde genişlet, ya da `snow` ile
+Noise el sıkışmasına geç ve SAS'i el sıkışma özetinden türet. Android'e geçmeden kapatılmalı.
+
 **Sonra sırayla:**
 
 1. **0.1.4'ü kuzenle canlı dene ve SONUCU SOR.** Özellikle: uygulamayı kapatıp açınca kod
@@ -139,12 +158,53 @@ var olması `online > 1` demektir. `PairingRoom` ise farklı semantik kullanır 
    ama fotoğraf 32 KB'lık kontrol mesajı sınırını aşar, ayrı bir ikili çerçeve tipi gerekir
    (`FILE_FRAME` deseni gibi). `parseControl`'e ham base64 gömme.
 
+**Araştırma sonucu — "hazır ne kullanalım" (2026-07-27, 3 paralel Codex lane'i, iddiaları
+doğrulandı):**
+
+- **WebRTC sarmalayıcısı ALMA.** simple-peer / PeerJS / libdatachannel / werift bu projede
+  çıkan dört hatanın **hiçbirini** engellemezdi; hepsi negotiation'ı sarmalıyor, biz orada
+  kırılmadık. WebView2 WebRTC'yi zaten içeriyor, bize maliyeti sıfır.
+- **Asıl tekerlek icadı sinyalleşme protokolü.** Yapılacak: Magic Wormhole'un posta kutusu /
+  nameplate semantiği — sayaç yerine **süresi dolan kiralama**, kalıcı + ack'li zarflar,
+  yeniden bağlanınca onaylanmamışların tekrarı. `MAX_ADMISSIONS = 8` bir çözüm değil,
+  erteleme: `cloudflare/src/index.ts:102` `disconnect()` sayacı azaltmıyor ve aynı fonksiyonda
+  `setAlarm` her girişte sıfırlandığı için 15 dk **kayan pencere**.
+- **İkinci öncelik: tek kanonik tel sözleşmesi.** Rust / tarayıcı TS / Worker aynı golden
+  vector'lardan geçsin. Base64 alfabesi ve UUID formatı hataları bunun yokluğundan doğdu.
+- **iroh: şimdilik ALMA.** Uç nokta kimliği takasını yine bize bırakıyor, çevrimdışı posta
+  kutusu yok, ve medya WebRTC'de kalacağı için iki ayrı taşıma demek. `iroh-blobs` yalnızca
+  "dosya kaldığı yerden devam etsin" gerçek gereksinim olunca değerli.
+- **Matrix / Tailscale / libp2p / Veilid / Waku: hayır.** İlk ikisi hesap veya tailnet ister,
+  yani "hesapsız" premisini siler; diğerleri iki cihaz için fazla ağır.
+- **UI: kütüphane ALMA.** İki ekran için Radix/shadcn/Mantine/i18next/Zustand hepsi gereksiz.
+  Türkçe stringler için tipli bir katalog yeterli.
+- **Profil fotoğrafı için hazır olan:** `createImageBitmap` (EXIF yönünü kendi çözüyor) +
+  canvas ile 256×256 kırpma + **WebP** (JPEG geri dönüşlü). Yeniden kodlama EXIF/GPS'i
+  kendiliğinden siler — gizlilik gereği bu. Şifreli SQLite'ta BLOB olarak sakla.
+- **SQLCipher'a geç** (`rusqlite` bundled özelliği var). Şu anki uygulama katmanı şifrelemesi
+  günlük/WAL verisini korumuyor. Geçmiş şeması büyümeden yap.
+- **Test: Playwright duman testi ekle.** jsdom CSS grid geometrisini yakalayamaz; bozuk iki
+  panelli düzeni ancak gerçek tarayıcı yakalar.
+- **İmzalama (SmartScreen):** Azure Artifact Signing ~9,99 USD/ay (5.000 imza).
+  **SignPath Foundation ücretsiz ama gerçek açık kaynak şartı var — repo private olduğu için
+  uygun değiliz.** sigstore SmartScreen'i değiştirmiyor.
+- **TURN, Android'de zorunlu hale gelir** (CGNAT, simetrik NAT, UDP engelli kurumsal Wi-Fi).
+  Masaüstü kararı değişmedi; bu konu **yalnızca Android fazı başlarken** açılır.
+
 **Açık işler (kullanıcı kararı bekliyor):**
 
 - **`mkvi-updates` reposu artık her sürümde ~3,8 MB büyüyecek** (installer commit'leniyor) ve
   geçmiş küçülmez. **KARAR VERİLDİ: olduğu gibi kalacak** (kullanıcı 2026-07-27). Yeniden açma.
-- **Flutter/UI yeniden yazımı gündemde.** Faz 8'in (`ARCHITECTURE.md:41`) asıl karar noktası.
-  Karar verilmeden UI'a büyük yatırım yapma.
+- **Flutter/UI yeniden yazımı — araştırma NET bir cevap verdi, karar hâlâ kullanıcının.**
+  Öneri: **Android için Flutter + `flutter_webrtc` + `flutter_rust_bridge`, Windows Tauri'de
+  kalsın, Rust çekirdeği çerçeveden bağımsız bir crate'e çıkarılsın.** Gerekçe: Android
+  WebView'da `getDisplayMedia()` **yok** (MDN uyumluluk tablosu), ekran paylaşımı MediaProjection
+  ister ve native pikselleri WebView'ın `RTCPeerConnection`'ına bağlamanın standart yolu yok —
+  yani "küçük bir Kotlin eklentisi" aslında ikinci bir WebRTC yığını demek. Arka planda süren
+  aramalar da foreground service ister, WebView bunu vermiyor. Maliyet: TypeScript'in **%0'ı**
+  Flutter'a taşınır (protokol dokümantasyon olarak kalır), Rust mantığının ~%80-90'ı yaşar.
+  Sadece ön planda çalışan bir Android denemesi istenirse Tauri 3-7 günde yapar; ürün parite
+  isteniyorsa Flutter 3-6 hafta. **Karar verilmeden UI'a büyük yatırım yapma.**
 - **TURN kararı: KAPALI, yeniden açma.** Yalnızca kuzenle yapılan gerçek deneme "ifade ekranı
   geldi ama bağlanmadı" ile sonuçlanırsa gündeme gelir. Kodda yalnızca ayarlanabilir ICE alanı var.
 - **Ses rölesi (Android) sorusu cevaplandı:** ayrı bir röle bileşeni eklenmeyecek; ses zaten
