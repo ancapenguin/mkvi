@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish-windows-update:
@@ -26,6 +26,25 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build
+      # Installers live as release assets; the feed repo only ever carries latest.json,
+      # so its git history stays a few kilobytes instead of growing by megabytes per release.
+      - name: Upload installer to the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          $tag = if ($env:GITHUB_REF -like 'refs/tags/*') { $env:GITHUB_REF_NAME } else { "v$version" }
+          $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
+          if (-not (Test-Path $source)) { throw "Kurulum dosyası bulunamadı: $source" }
+          gh release view $tag *> $null
+          if (-not $?) { gh release create $tag --title "MKVI $version" --notes "MKVI $version" }
+          gh release upload $tag $source ($source + '.sig') --clobber
+          "TAG=$tag"     | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          "VERSION=$version" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      # The feed URL that shipped clients poll never changes; only the download URL
+      # inside latest.json moves, and every client follows whatever url it finds there.
       - name: Publish public update feed
         shell: pwsh
         env:
@@ -40,17 +59,15 @@ jobs:
           $keyForSsh = $keyPath.Replace('\', '/')
           $env:GIT_SSH_COMMAND = "ssh -i `"$keyForSsh`" -o IdentitiesOnly=yes"
           git clone git@github.com:ancapenguin/mkvi-updates.git update-feed
-          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          $version = $env:VERSION
           $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
           $signature = (Get-Content ($source + '.sig') -Raw).Trim()
-          New-Item -ItemType Directory -Force -Path update-feed\windows-x86_64 | Out-Null
-          Copy-Item $source update-feed\windows-x86_64\
-          Copy-Item ($source + '.sig') update-feed\windows-x86_64\
-          $metadata = @{ version = $version; notes = "MKVI $version"; pub_date = (Get-Date).ToUniversalTime().ToString('o'); platforms = @{ 'windows-x86_64' = @{ url = "https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_$($version)_x64-setup.exe"; signature = $signature } } } | ConvertTo-Json -Depth 5
+          $downloadUrl = "https://github.com/ancapenguin/mkvi/releases/download/$($env:TAG)/MKVI_$($version)_x64-setup.exe"
+          $metadata = @{ version = $version; notes = "MKVI $version"; pub_date = (Get-Date).ToUniversalTime().ToString('o'); platforms = @{ 'windows-x86_64' = @{ url = $downloadUrl; signature = $signature } } } | ConvertTo-Json -Depth 5
           Set-Content -Path update-feed\latest.json -Value $metadata -NoNewline
           Set-Location update-feed
           git config user.name 'MKVI updater'
           git config user.email 'actions@github.com'
-          git add latest.json windows-x86_64
+          git add latest.json
           git commit -m "Publish MKVI $version"
           git push

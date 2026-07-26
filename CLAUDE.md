@@ -67,6 +67,7 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 - **Faz 1-5 tamam:** Tauri kabuğu, tipli signaling, TTL'li Durable Object Worker, OS güvenli depoda cihaz anahtarı, SAS onaylı eşleştirme, WebRTC DataChannel mesajlaşma, şifreli SQLite geçmiş, kabul onaylı dosya aktarımı, ses/video arama ve ekran paylaşımı.
 - **0.1.1 sürüm yükseltmesi + pairing yarış düzeltmesi:** kodu oluşturan taraf artık kimliğini karşı taraf odaya girmeden önce yayınlamıyor (`beginCreatorHandshake`, `src/App.tsx`).
 - **2026-07-26 — inceleme bulguları temizliği:** `peer-transport.ts`'teki 5 mojibake Türkçe string onarıldı; Worker'ın `identity` zarfından ölü `rendezvous` alanı kaldırıldı (`signaling.ts` tipiyle birlikte); `App.tsx`'te her render'da `RendezvousClient` üreten ref lazy hale getirildi; `parseControl`/`safeName`/`safeMime` export edilip 22 yeni birim testi eklendi (suite 4 → 26).
+- **2026-07-26 — inceleme kapanışı:** dosya alımı akışlı hale getirildi (Rust `file_sink_*` komutları + `src/services/file-sink.ts`; WebView belleği 4 MB ile sınırlı, hedef yolu Rust seçiyor), güncelleme installer'ları GitHub Releases'e taşındı (feed reposuna artık sadece `latest.json` commit'leniyor), CSP daraltıldı (`https:` joker kaldırıldı, `object-src`/`frame-src`/`form-action` kapatıldı), `listPeers()` → `loadKnownPeer()` ile tek eşe daraltıldı ve `peerName` artık kayıttan geliyor. Suite 26 → 30 TS, 3 → 6 Rust.
 - **Faz 6 (Android denemesi) ve Faz 7 (sertleştirme) başlamadı.**
 
 ---
@@ -76,54 +77,56 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 > ⚠️ **BU BÖLÜM TEK OTURUM BLOĞU İÇERİR. Yeni handoff yazarken eski tarihli bloğu SİL,
 > ÜSTÜNE EKLEME. >1 tarihli blok görürsen fazlasını SİL.**
 
-### 2026-07-26
+### 2026-07-26 (akşam)
 
-**Durum:** Tam gate YEŞİL — `npx tsc --noEmit` temiz, `npm test` 26/26, `cargo test` 3/3,
-`cloudflare && npm run check` dry-run başarılı. Çalışma ağacında **commit edilmemiş** değişiklikler var.
+**Durum:** Tam gate YEŞİL — `npx tsc --noEmit` temiz, `npm test` 30/30, `cargo test` 6/6,
+`cloudflare && npm run check` dry-run başarılı. İnceleme listesinin **6 maddesinin tamamı kapandı**.
+Çalışma ağacında **commit edilmemiş** değişiklikler var.
 
-**İLK İŞ:** Çalışma ağacındaki inceleme düzeltmelerini tek commit olarak kaydet —
-`src/services/peer-transport.ts`, `src/services/peer-transport.test.ts`,
-`cloudflare/src/index.ts`, `src/domain/signaling.ts`, `src/App.tsx`, `CLAUDE.md`
-→ "İnceleme bulguları: mojibake, ölü signaling alanı, birim testleri".
+**İLK İŞ:** Çalışma ağacını tek commit olarak kaydet —
+`src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json`, `src/domain/peer-transport.ts`,
+`src/services/peer-transport.ts`, `src/services/file-sink.ts`, `src/services/file-sink.test.ts`,
+`src/services/local-security.ts`, `src/App.tsx`, `.github/workflows/publish-update.yml`, `CLAUDE.md`
+→ "Akışlı dosya alımı, Releases tabanlı güncelleme, daraltılmış CSP ve tek eş tipi".
 Commit'ten sonra **push etme**, kullanıcıya sor.
-(0.1.1 sürüm yükseltmesi ve pairing yarış düzeltmesi `ff38c1e`'de zaten commit'li.)
 
 **Sonra sırayla:**
 
-0. **ACİL — sürüm yayınlamadan önce:** `e4e3ab8` workflow'u `MKVI_UPDATES_DEPLOY_KEY`
-   yerine **`MKVI_UPDATES_DEPLOY_KEY_B64`** adlı yeni bir GitHub secret'ı bekliyor
-   (`.github/workflows/publish-update.yml:32`), ve değeri base64 kodlu olmalı. Bu secret
-   repo ayarlarında oluşturulmadıysa bir sonraki `v*` tag'i push edildiğinde yayın adımı
-   patlar. Kullanıcıya secret'ın eklenip eklenmediğini sor; eklenmediyse önce onu hallet.
-
-3. `src/services/peer-transport.ts:333` — `finishReceive` tüm dosyayı bellekte `Blob`
-   parçaları olarak topluyor. `MAX_FILE_BYTES` 512 MB (`src/domain/peer-transport.ts:50`),
-   yani 512 MB'lık bir aktarım WebView'i şişiriyor. Streaming yazma (File System Access
-   API veya Tauri tarafında chunk'ları diske yazan bir komut) araştır. **Karar noktası:**
-   Tauri komutuna mı taşınsın (güvenli, hedef yolu Rust seçer) yoksa tarayıcı API'siyle mi?
-   Kullanıcıya sor, kendi başına seçme.
-4. `.github/workflows/publish-update.yml:47-48` — her sürümde NSIS installer'ı
-   `mkvi-updates` git reposuna commit'liyor. Git geçmişi asla küçülmez; birkaç düzine
-   sürüm sonra klonlama dayanılmaz olur. GitHub Releases asset'lerine taşımayı öner.
-   **Karar noktası:** `latest.json`'daki `url` alanı Releases URL'sine dönerse eski
-   istemciler hâlâ raw.githubusercontent adresini soruyor olacak — geçiş planı gerekiyor.
-5. `src-tauri/tauri.conf.json:23` — CSP'de `connect-src 'self' https: wss:` her hosta açık.
-   Endpoint kullanıcı ayarlanabilir olduğu için bilinçli bir taviz olabilir; daraltmadan
-   önce kullanıcıya sor.
-6. `src/App.tsx:90` — `listPeers()` liste dönüyor ama sadece `knownPeers[0]` kullanılıyor;
-   `display_name` ve UI'daki `peerName` sabit `"Kuzenim"`. Tek eş bilinçli bir ürün kararıysa
-   `peers()`'ın liste dönmesi yanıltıcı — ya çoklu eşe açılsın ya tip daraltılsın. Ürün kararı, sor.
+1. **Gerçek uçtan uca dosya testi yapılmadı.** `file_sink_*` komutları yalnızca birim
+   testleriyle doğrulandı; iki cihaz arasında büyük (≥100 MB) bir dosya hiç aktarılmadı.
+   `npm run tauri dev` ile iki örnek açıp aktarım yap, İndirilenler klasöründe dosyanın
+   bozulmadan oluştuğunu ve WebView belleğinin şişmediğini gör. Kusur çıkarsa bakılacak yer:
+   `src/services/peer-transport.ts:300` (`flushReceive` sıralaması) ve
+   `src-tauri/src/lib.rs` içindeki `file_sink_write`.
+2. **Yayın akışı canlıda denenmedi.** Yeni workflow installer'ı GitHub Releases'e yüklüyor,
+   feed reposuna sadece `latest.json` gidiyor (`.github/workflows/publish-update.yml:29-49`).
+   `permissions: contents: write` eklendi. Bir `v*` tag'i push etmeden önce workflow'u
+   `workflow_dispatch` ile elle çalıştırıp doğrula. **Eski istemciler kırılmaz** — feed URL'si
+   (`raw.githubusercontent.com/.../latest.json`) değişmedi, sadece içindeki `url` alanı değişti.
+3. `mkvi-updates` reposunda **eski installer binary'leri hâlâ git geçmişinde**. Yeni sürümler
+   artık oraya yazmıyor ama geçmiş küçülmez. **Karar noktası:** repo yeniden mi kurulsun
+   (temiz history, tek `latest.json`) yoksa olduğu gibi mi bırakılsın? Kullanıcıya sor.
 
 **Açık işler (kod dışı, kullanıcı kararı bekliyor):**
 
-- `.secrets/mkvi-updater.key` + `.password` diskte düz metin duruyor. `.gitignore`'da,
-  commit riski yok, ama bu anahtar tüm kurulu istemcilere imzalı güncelleme gönderebilen
-  kök yetkisi. CI zaten GitHub Secrets kullanıyor. **Silinsin mi, yoksa yedeği alınıp
-  parola korumalı bir kasaya mı taşınsın?** Kullanıcı onayı olmadan bu dosyalara dokunma.
-- Faz 6 (Android denemesi) hiç başlamadı. `ARCHITECTURE.md:41` bunun Flutter'a geçiş
-  kararının yeniden ele alınacağı nokta olduğunu söylüyor.
+- **`.secrets/` içindeki düz metin özel anahtarlar HÂLÂ DURUYOR.** Kullanıcı silinmesini
+  onayladı ama Claude'un izin sınıflandırıcısı `Remove-Item`'ı engelledi. Kullanıcının elle
+  çalıştırması gereken komut:
+  `Remove-Item .secrets\mkvi-updater.key, .secrets\mkvi-updater.password, .secrets\mkvi-updates-deploy -Force`
+  Ayrıca artık kullanılmayan eski GitHub secret'ı: `gh secret delete MKVI_UPDATES_DEPLOY_KEY --repo ancapenguin/mkvi`.
+  (Karşılıkları GitHub Secrets'ta mevcut: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
+  `MKVI_UPDATES_DEPLOY_KEY_B64` — doğrulandı.)
+- **Flutter/UI yeniden yazımı gündemde.** Kullanıcı Tauri'nin Windows dışında sorun
+  çıkaracağından endişeli; "çekirdek Rust kalsın, UI Flutter olsun" fikrini attı, acelesi yok.
+  Bu Faz 6'nın (`ARCHITECTURE.md:41`) asıl karar noktası. Karar verilmeden UI'a büyük yatırım yapma.
 
 **Bilinen tuzaklar:**
+
+- **PowerShell 5.1 `Get-Content -Raw` bu dosyaları ANSI okuyor.** `CLAUDE.md` gibi Türkçe
+  içeren dosyaları PowerShell ile kesip yazmaya çalışma — Edit aracını kullan. Bu oturumda
+  `Substring` denemesi patladı ve dosyayı boşaltmasına ramak kaldı.
+- **Claude'un izin sınıflandırıcısı `Remove-Item`'ı engelliyor.** Dosya silme gerektiren
+  adımları kullanıcıya komut olarak ver, döngüye girme.
 
 - **Codex CLI bu makinede `--full-auto` ile dosya YAZAMIYOR.** Windows sandbox'ı
   "split writable root sets" hatası verip reddediyor (`CreateProcessAsUserW failed: 5`).
