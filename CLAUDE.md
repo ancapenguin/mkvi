@@ -98,6 +98,13 @@ normaldir, yalnızca WebSocket kabul ettiği anlamına gelir.
 → "Akışlı dosya alımı, Releases tabanlı güncelleme, daraltılmış CSP ve tek eş tipi".
 Commit'ten sonra **push etme**, kullanıcıya sor.
 
+**ÇÖZÜLEN KÖK NEDEN (2026-07-26 akşam):** "Signaling sunucusuna bağlanılamadı." hatasının ve
+kuzenle yaşanan ilk eşleşme başarısızlığının gerçek sebebi bulundu: `PairingRoom` odaya giren
+bağlantıyı `admitted` olarak diske yazıyor ama kapanışta **azaltmıyordu**; eşik 2 olduğu için
+tek bir yeniden deneme kodu 15 dakikalığına ölü hale getiriyordu. `MAX_ADMISSIONS = 8` ile
+düzeltildi (`cloudflare/src/index.ts`), Worker yayına alındı ve canlı doğrulandı (4/4 yeniden
+bağlanma başarılı). **Bu sunucu tarafı bir düzeltmedir; istemci güncellemesi gerektirmez.**
+
 **Sonra sırayla:**
 
 1. **Gerçek uçtan uca dosya testi yapılmadı.** `file_sink_*` komutları yalnızca birim

@@ -8,6 +8,14 @@ const CODE = /^[A-HJ-NP-Z2-9]{13,16}$/;
 // not a user identifier. A pair derives and stores it locally after SAS approval.
 const OPAQUE_ID = /^[A-Za-z0-9_-]{43}$/;
 const PEER_TTL_MS = 30 * 24 * 60 * 60_000;
+/**
+ * Admissions are counted but never released, so this is a retry budget rather than
+ * a device count: an app restart, a double-tapped button or a dropped socket all
+ * re-enter the room. Capping it at two made a single retry burn the code and the
+ * user only saw "could not connect". Concurrency is still limited to two live
+ * sockets, and the fifteen-minute alarm remains the real single-use window.
+ */
+const MAX_ADMISSIONS = 8;
 
 export default {
   fetch(request: Request, env: Env): Response {
@@ -44,7 +52,7 @@ export class PairingRoom implements DurableObject {
 
   async fetch(request: Request): Promise<Response> {
     const admitted = (await this.state.storage.get<number>("admitted")) ?? 0;
-    if (admitted >= 2 || this.clients.size >= 2) return new Response("Pairing room is full", { status: 409 });
+    if (admitted >= MAX_ADMISSIONS || this.clients.size >= 2) return new Response("Pairing room is full", { status: 409 });
     const pair = new WebSocketPair();
     const client = pair[0];
     const server = pair[1];

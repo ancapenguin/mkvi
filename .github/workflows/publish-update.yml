@@ -26,25 +26,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npm run tauri build
-      # Installers live as release assets; the feed repo only ever carries latest.json,
-      # so its git history stays a few kilobytes instead of growing by megabytes per release.
-      - name: Upload installer to the GitHub release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
-          $tag = if ($env:GITHUB_REF -like 'refs/tags/*') { $env:GITHUB_REF_NAME } else { "v$version" }
-          $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
-          if (-not (Test-Path $source)) { throw "Kurulum dosyası bulunamadı: $source" }
-          gh release view $tag *> $null
-          if (-not $?) { gh release create $tag --title "MKVI $version" --notes "MKVI $version" }
-          gh release upload $tag $source ($source + '.sig') --clobber
-          "TAG=$tag"     | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-          "VERSION=$version" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
-      # The feed URL that shipped clients poll never changes; only the download URL
-      # inside latest.json moves, and every client follows whatever url it finds there.
+      # The installer is committed into the PUBLIC mkvi-updates repo, not attached to a
+      # release of this repo: ancapenguin/mkvi is private, so its release assets return
+      # 404 to unauthenticated clients and the updater could never download them.
+      # Moving these binaries out of git again requires a public download host first.
       - name: Publish public update feed
         shell: pwsh
         env:
