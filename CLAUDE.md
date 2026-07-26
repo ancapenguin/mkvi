@@ -72,7 +72,7 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 - **2026-07-26 gece — uygulama İLK KEZ gerçekten bağlandı.** Üç ayrı kusur çözüldü: `PairingRoom`'un `admitted` sayacı kapanışta azalmadığı için tek bir yeniden deneme kodu 15 dk ölü hale getiriyordu (`MAX_ADMISSIONS = 8`); Rust'ın `STANDARD_NO_PAD` base64'ü (`+`,`/`) Worker'ın base64url filtresine takıldığı için eşleşmelerin ~%93'ü kimlik alışverişinde sessizce ölüyordu (Worker iki alfabeyi de kabul ediyor); `sendChat` tireli `crypto.randomUUID()` üretip alıcıdaki `parseControl`'e reddettirdiği için hiçbir mesaj ulaşmıyordu (`randomTransferId`). Worker iki kez yayına alındı.
 - **0.1.3 arayüz onarımı:** grid'e açık sütun tanımlandı (sohbet örtük ikinci sütuna sıkışıyordu), sayfa kaydırması kapatıldı, global `input` kuralının `hidden`'ı ezmesi engellendi, kişi adı düzenlenebilir yapıldı (yerelde saklanır, tel üzerinden gitmez), kayıtlı eşe yeniden bağlanma durumu görünür oldu. Suite 30 → 40 TS.
 - **0.1.4 — kullanım kalitesi + yayın hattı onarımı:** yeniden bağlanma el sıkışması artık *varlık* üzerine tetikleniyor (oda posta kutusu tutmuyor; karşı taraf çevrimdışıyken atılan kimlik/teklif çöpe gidiyordu, eşleşmelerin yarısı sessizce ölüyordu), kimlik doğrulanmadan gelen sinyaller atılmak yerine kuyruğa alınıyor, dosya aktarımında ilerleme çubuğu, WebView otomatik-tamamlama her alanda kapatıldı, mikrofonsuz cihazda arama artık düşmüyor (yalnız-video'ya geriliyor), kullanıcı kendi adını belirliyor ve `profile` kontrol mesajıyla karşıya gönderiyor (takma ad yerelde kalıyor). v0.1.3 CI'ı `$env:VERSION` boş olduğu için kırılmıştı ve installer feed reposuna hiç kopyalanmıyordu — ikisi de düzeltildi. Suite 40 → 58 (worker paketine ilk 12 test).
-- **Faz 8 (Android denemesi) ve Faz 9 (sertleştirme) başlamadı.** Faz 7 (profil fotoğrafı) karar bekliyor.
+- **Faz 8 (Android denemesi) ve Faz 9 (sertleştirme) başlamadı.** Faz 7 (profil fotoğrafı) onaylandı, sıradaki iş.
 
 ---
 
@@ -83,12 +83,14 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 
 ### 2026-07-27
 
-**Durum:** Sürüm **0.1.4**'e yükseltildi (4 yerde), çalışma ağacı **commit'siz**. Tam gate YEŞİL:
+**Durum:** Sürüm **0.1.4**'e yükseltildi (4 yerde). Çalışma ağacı temiz; commit `150cc6e`
+**yerelde duruyor, PUSH EDİLMEDİ** (kullanıcının kararı). Tam gate YEŞİL:
 `tsc` temiz · `npm test` 58/58 (6 dosya, worker paketi dahil) · `cargo test` 6/6 · worker dry-run OK.
 
-**İLK İŞ:** Değişiklikleri commit'le ve `v0.1.4` tag'ini push et; sonra
-`gh run list --repo ancapenguin/mkvi --limit 1` ile derlemeyi izle. **v0.1.3 CI'ı BAŞARISIZDI**
-(`30220047653`) — yani kuzene gönderilecek 0.1.3 installer'ı hiç var olmadı.
+**İLK İŞ:** Kullanıcıya yayına hazır olduğunu hatırlat; onay verirse `git push` + `v0.1.4`
+tag'ini push et, sonra `gh run list --repo ancapenguin/mkvi --limit 1` ile derlemeyi izle.
+**v0.1.3 CI'ı BAŞARISIZDI** (`30220047653`) — yani kuzene gönderilecek 0.1.3 installer'ı
+hiç var olmadı. Onay gelmeden push etme.
 
 **v0.1.3 NEDEN KIRILDI (düzeltildi, ama doğrulanmadı):** `.github/workflows/publish-update.yml`
 içinde `$env:VERSION` hiçbir yerde tanımlı değildi; dosya adı `MKVI__x64-setup.exe` olarak
@@ -97,6 +99,11 @@ içinde `$env:VERSION` hiçbir yerde tanımlı değildi; dosya adı `MKVI__x64-s
 yazıyordu. Artık sürüm `src-tauri/tauri.conf.json`'dan okunuyor, `.exe` public
 `mkvi-updates/windows-x86_64/` altına kopyalanıyor ve `latest.json` raw URL'yi gösteriyor.
 **Bu düzeltme CI'da hiç çalışmadı — ilk yeşil derleme onu doğrulayacak.**
+
+**DAĞITIM GERÇEĞİ — indirilebilir tek sürüm hâlâ 0.1.2 ve ONDA SOHBET ÇALIŞMIYOR.** Feed
+deposunda yalnızca 0.1.0 / 0.1.1 / 0.1.2 installer'ları var; `latest.json` 0.1.2'yi gösteriyor.
+Mesaj kimliği düzeltmesi (`randomTransferId`, `84e63ac`) v0.1.2'den *sonra* geldi ve hiç
+yayınlanmadı — yani kuzenin elindeki yapı mesaj gönderemiyor. 0.1.4 yayınlanana kadar bu böyle.
 
 **Kuzene gidecek link (derleme yeşile dönünce doğrula, 200 + `MZ` başlığı bekleniyor):**
 `https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.4_x64-setup.exe`
@@ -125,15 +132,17 @@ var olması `online > 1` demektir. `PairingRoom` ise farklı semantik kullanır 
 3. **Uçtan uca dosya aktarımı hiç denenmedi** (≥100 MB). Kusur çıkarsa:
    `src/services/peer-transport.ts` `flushReceive` sıralaması ve `src-tauri/src/lib.rs`
    `file_sink_write`. İlerleme çubuğu artık `file-progress` olayını gösteriyor, teşhis kolaylaştı.
-4. **Profil fotoğrafı (Faz 7) karar bekliyor** — `ARCHITECTURE.md:38`. Önerilen: DataChannel
-   üzerinden ≤64 KB yeniden boyutlanmış kare, şifreli SQLite'ta yerel saklama, sunucuya hiçbir
-   şey gitmez. `profile` kontrol mesajı zaten var, doğal uzantısı.
+4. **Profil fotoğrafı (Faz 7) — KULLANICI ONAYLADI, sıradaki geliştirme işi bu.**
+   `ARCHITECTURE.md:38`. Tasarım: DataChannel üzerinden ≤64 KB yeniden boyutlanmış kare
+   (canvas ile yerelde küçült), şifreli SQLite'ta yerel saklama, sunucuya hiçbir şey gitmez.
+   `profile` kontrol mesajı zaten var (`src/domain/peer-transport.ts`), doğal uzantısı —
+   ama fotoğraf 32 KB'lık kontrol mesajı sınırını aşar, ayrı bir ikili çerçeve tipi gerekir
+   (`FILE_FRAME` deseni gibi). `parseControl`'e ham base64 gömme.
 
 **Açık işler (kullanıcı kararı bekliyor):**
 
 - **`mkvi-updates` reposu artık her sürümde ~3,8 MB büyüyecek** (installer commit'leniyor) ve
-  geçmiş küçülmez. Seçenekler: (a) `mkvi` public yapılır, Releases çalışır; (b) feed deposuna
-  Releases açmak için PAT secret'ı eklenir; (c) olduğu gibi bırakılır. **Kullanıcıya sor.**
+  geçmiş küçülmez. **KARAR VERİLDİ: olduğu gibi kalacak** (kullanıcı 2026-07-27). Yeniden açma.
 - **Flutter/UI yeniden yazımı gündemde.** Faz 8'in (`ARCHITECTURE.md:41`) asıl karar noktası.
   Karar verilmeden UI'a büyük yatırım yapma.
 - **TURN kararı: KAPALI, yeniden açma.** Yalnızca kuzenle yapılan gerçek deneme "ifade ekranı
