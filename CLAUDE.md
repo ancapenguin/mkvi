@@ -69,6 +69,8 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 - **2026-07-26 — inceleme bulguları temizliği:** `peer-transport.ts`'teki 5 mojibake Türkçe string onarıldı; Worker'ın `identity` zarfından ölü `rendezvous` alanı kaldırıldı (`signaling.ts` tipiyle birlikte); `App.tsx`'te her render'da `RendezvousClient` üreten ref lazy hale getirildi; `parseControl`/`safeName`/`safeMime` export edilip 22 yeni birim testi eklendi (suite 4 → 26).
 - **2026-07-26 — inceleme kapanışı:** dosya alımı akışlı hale getirildi (Rust `file_sink_*` komutları + `src/services/file-sink.ts`; WebView belleği 4 MB ile sınırlı, hedef yolu Rust seçiyor), güncelleme installer'ları GitHub Releases'e taşındı (feed reposuna artık sadece `latest.json` commit'leniyor), CSP daraltıldı (`https:` joker kaldırıldı, `object-src`/`frame-src`/`form-action` kapatıldı), `listPeers()` → `loadKnownPeer()` ile tek eşe daraltıldı ve `peerName` artık kayıttan geliyor. Suite 26 → 30 TS, 3 → 6 Rust.
 - **2026-07-26 — ayarlanabilir ICE:** `src/domain/ice.ts` + ayarlar panelinde ICE sunucusu alanı. Koda hiçbir TURN sağlayıcısı gömülmedi; alan boşken davranış eskisiyle birebir aynı (yalnız STUN, saf P2P). Kullanıcı kendi TURN sunucusunu kurmama kararı aldı — alan, ileride gerek olursa yeni sürüm derlemeden çözüm yapıştırabilmek için var.
+- **2026-07-26 gece — uygulama İLK KEZ gerçekten bağlandı.** Üç ayrı kusur çözüldü: `PairingRoom`'un `admitted` sayacı kapanışta azalmadığı için tek bir yeniden deneme kodu 15 dk ölü hale getiriyordu (`MAX_ADMISSIONS = 8`); Rust'ın `STANDARD_NO_PAD` base64'ü (`+`,`/`) Worker'ın base64url filtresine takıldığı için eşleşmelerin ~%93'ü kimlik alışverişinde sessizce ölüyordu (Worker iki alfabeyi de kabul ediyor); `sendChat` tireli `crypto.randomUUID()` üretip alıcıdaki `parseControl`'e reddettirdiği için hiçbir mesaj ulaşmıyordu (`randomTransferId`). Worker iki kez yayına alındı.
+- **0.1.3 arayüz onarımı:** grid'e açık sütun tanımlandı (sohbet örtük ikinci sütuna sıkışıyordu), sayfa kaydırması kapatıldı, global `input` kuralının `hidden`'ı ezmesi engellendi, kişi adı düzenlenebilir yapıldı (yerelde saklanır, tel üzerinden gitmez), kayıtlı eşe yeniden bağlanma durumu görünür oldu. Suite 30 → 40 TS.
 - **Faz 6 (Android denemesi) ve Faz 7 (sertleştirme) başlamadı.**
 
 ---
@@ -78,25 +80,21 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 > ⚠️ **BU BÖLÜM TEK OTURUM BLOĞU İÇERİR. Yeni handoff yazarken eski tarihli bloğu SİL,
 > ÜSTÜNE EKLEME. >1 tarihli blok görürsen fazlasını SİL.**
 
-### 2026-07-26 (akşam)
+### 2026-07-26 (gece)
 
-**Durum:** Tam gate YEŞİL — `npx tsc --noEmit` temiz, `npm test` 30/30, `cargo test` 6/6,
-`cloudflare && npm run check` dry-run başarılı. İnceleme listesinin **6 maddesinin tamamı kapandı**.
-Çalışma ağacında **commit edilmemiş** değişiklikler var.
+**Durum:** Tam gate YEŞİL — `tsc` temiz, `npm test` 40/40, `cargo test` 6/6, worker dry-run OK.
+Çalışma ağacı **temiz**, her şey commit'li ve `main` push'lu (son commit `84e63ac`).
 
-**KURULUM/DAĞITIM DURUMU (kullanıcı sordu, cevap burada dursun):**
-GitHub Releases **boş** — `v0.1.0` ve `v0.1.1` tag push'larının ikisi de başarısız oldu; sadece
-26 Tem 19:09'daki `workflow_dispatch` çalışması feed'e yükledi. Bugün çalışan tek indirme linki:
-`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.1_x64-setup.exe`
-(HTTP 200, 3.61 MB doğrulandı). Worker canlı — `/` adresine `426 Upgrade Required` dönmesi
-normaldir, yalnızca WebSocket kabul ettiği anlamına gelir.
+**İLK İŞ:** `gh run list --repo ancapenguin/mkvi --limit 2` ile **v0.1.3 derlemesinin
+(`30220047653`) bittiğini doğrula.** Başarılıysa şu linkin anonim indiğini test et:
+`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.3_x64-setup.exe`
+(200 + `MZ` başlığı bekleniyor). Başarısızsa `gh run view <id> --log-failed` oku.
+Kullanıcı bu linki kuzenine gönderecek; SmartScreen uyarısı normaldir (imza sertifikası yok).
 
-**İLK İŞ:** Çalışma ağacını tek commit olarak kaydet —
-`src-tauri/src/lib.rs`, `src-tauri/tauri.conf.json`, `src/domain/peer-transport.ts`,
-`src/services/peer-transport.ts`, `src/services/file-sink.ts`, `src/services/file-sink.test.ts`,
-`src/services/local-security.ts`, `src/App.tsx`, `.github/workflows/publish-update.yml`, `CLAUDE.md`
-→ "Akışlı dosya alımı, Releases tabanlı güncelleme, daraltılmış CSP ve tek eş tipi".
-Commit'ten sonra **push etme**, kullanıcıya sor.
+**DAĞITIM GERÇEĞİ — unutma:** `ancapenguin/mkvi` deposu **private**. Bu yüzden GitHub Releases
+asset linkleri dışarıya **404** verir. Installer, public `ancapenguin/mkvi-updates` deposuna
+commit'lenir ve `latest.json` oradaki raw URL'yi gösterir. Bu bilinçli bir geri dönüştür;
+**Releases'e taşımayı yeniden önerme** (bu oturumda denendi, kırdı, geri alındı).
 
 **ÇÖZÜLEN KÖK NEDEN (2026-07-26 akşam):** "Signaling sunucusuna bağlanılamadı." hatasının ve
 kuzenle yaşanan ilk eşleşme başarısızlığının gerçek sebebi bulundu: `PairingRoom` odaya giren
@@ -119,37 +117,33 @@ temsilini değiştirir ve mevcut eşleşmeleri bozar.
 
 **Sonra sırayla:**
 
--1. **İLK İŞ — regresyon testi yaz.** Yukarıdaki iki kusur da (`admitted` sayacı ve alfabe
-   uyuşmazlığı) tip kontrolünden ve mevcut 38 testten sağ çıktı; çünkü Worker'ın
-   `isSignalPayload`/`isRelayEnvelope` fonksiyonlarının **hiç testi yok**. `cloudflare/`
-   paketine vitest ekle ve en az şunları kilitle: standart alfabeli (`+`,`/`) 43/86 karakterlik
-   kimlik zarfı KABUL edilir; yanlış uzunluk reddedilir; aynı kodla 3+ yeniden bağlanma
-   çalışır. Bu olmadan bir sonraki protokol dokunuşu aynı sessiz kırılmayı üretir.
-
-1. **Gerçek uçtan uca dosya testi yapılmadı.** `file_sink_*` komutları yalnızca birim
-   testleriyle doğrulandı; iki cihaz arasında büyük (≥100 MB) bir dosya hiç aktarılmadı.
-   `npm run tauri dev` ile iki örnek açıp aktarım yap, İndirilenler klasöründe dosyanın
-   bozulmadan oluştuğunu ve WebView belleğinin şişmediğini gör. Kusur çıkarsa bakılacak yer:
-   `src/services/peer-transport.ts:300` (`flushReceive` sıralaması) ve
-   `src-tauri/src/lib.rs` içindeki `file_sink_write`.
-2. **Yayın akışı canlıda denenmedi.** Yeni workflow installer'ı GitHub Releases'e yüklüyor,
-   feed reposuna sadece `latest.json` gidiyor (`.github/workflows/publish-update.yml:29-49`).
-   `permissions: contents: write` eklendi. Bir `v*` tag'i push etmeden önce workflow'u
-   `workflow_dispatch` ile elle çalıştırıp doğrula. **Eski istemciler kırılmaz** — feed URL'si
-   (`raw.githubusercontent.com/.../latest.json`) değişmedi, sadece içindeki `url` alanı değişti.
-3. `mkvi-updates` reposunda **eski installer binary'leri hâlâ git geçmişinde**. Yeni sürümler
-   artık oraya yazmıyor ama geçmiş küçülmez. **Karar noktası:** repo yeniden mi kurulsun
-   (temiz history, tek `latest.json`) yoksa olduğu gibi mi bırakılsın? Kullanıcıya sor.
+1. **0.1.3'ü kuzenle canlı dene ve SONUCU SOR.** Hangi ekranda takıldıkları tek teşhis
+   verisi. İfade ekranı gelmiyorsa sinyalleşme; gelip sonra takılıyorsa WebRTC/NAT
+   (o zaman ve yalnız o zaman TURN gündeme gelir — aşağıdaki karara bak).
+2. **`cloudflare/` paketine test yaz.** Bu oturumdaki üç kusur da (`admitted` sayacı, base64
+   alfabe uyuşmazlığı, UUID'li mesaj kimliği) tip kontrolünden ve testlerden sağ çıktı; Worker'ın
+   `isSignalPayload`/`isRelayEnvelope` fonksiyonlarının **hiç testi yok**. Vitest ekle ve kilitle:
+   standart alfabeli (`+`,`/`) 43/86 karakterlik kimlik zarfı KABUL edilir; yanlış uzunluk
+   reddedilir; aynı kodla 3+ yeniden bağlanma çalışır.
+3. **Arayüz gerçek pencerede hiç görülmedi.** 0.1.3'teki grid düzeltmesi yalnızca akıl yürütmeyle
+   doğrulandı (`ChatCallWorkspace.css`, açık `grid-template-columns`). Aramada sohbetin yan panel
+   olduğunu, sayfanın kaymadığını, başlığın sabit kaldığını gözle doğrula.
+4. **Uçtan uca dosya aktarımı hiç denenmedi.** `file_sink_*` yalnızca birim testli; ≥100 MB'lık
+   gerçek aktarım yapılmadı. Kusur çıkarsa: `src/services/peer-transport.ts` `flushReceive`
+   sıralaması ve `src-tauri/src/lib.rs` `file_sink_write`.
+5. `mkvi-updates` reposu her sürümde ~3,8 MB büyüyor ve geçmiş küçülmez. Depo private olduğu
+   sürece alternatif yok. **Karar noktası:** ya `mkvi` public yapılır (Releases çalışır), ya
+   feed deposuna Releases açmak için PAT secret'ı eklenir, ya da olduğu gibi bırakılır. Kullanıcıya sor.
 
 **Açık işler (kod dışı, kullanıcı kararı bekliyor):**
 
-- **`.secrets/` içindeki düz metin özel anahtarlar HÂLÂ DURUYOR.** Kullanıcı silinmesini
-  onayladı ama Claude'un izin sınıflandırıcısı `Remove-Item`'ı engelledi. Kullanıcının elle
-  çalıştırması gereken komut:
-  `Remove-Item .secrets\mkvi-updater.key, .secrets\mkvi-updater.password, .secrets\mkvi-updates-deploy -Force`
-  Ayrıca artık kullanılmayan eski GitHub secret'ı: `gh secret delete MKVI_UPDATES_DEPLOY_KEY --repo ancapenguin/mkvi`.
-  (Karşılıkları GitHub Secrets'ta mevcut: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`,
-  `MKVI_UPDATES_DEPLOY_KEY_B64` — doğrulandı.)
+- **Özel anahtarlar silindi — yerelde imzalı derleme ARTIK MÜMKÜN DEĞİL.** `.secrets/` içinde
+  yalnızca `.pub` dosyaları kaldı. İmza anahtarı sadece GitHub Secrets'ta
+  (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `MKVI_UPDATES_DEPLOY_KEY_B64`).
+  Yani **her yayın CI'dan geçmek zorunda**: sürümü 4 yerde yükselt
+  (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`
+  `application_info`), commit'le, `v*` tag'i push et. `npm run tauri build` yerelde imza
+  olmadığı için başarısız olur; bu beklenen davranıştır, düzeltmeye çalışma.
 - **Flutter/UI yeniden yazımı gündemde.** Kullanıcı Tauri'nin Windows dışında sorun
   çıkaracağından endişeli; "çekirdek Rust kalsın, UI Flutter olsun" fikrini attı, acelesi yok.
   Bu Faz 6'nın (`ARCHITECTURE.md:41`) asıl karar noktası. Karar verilmeden UI'a büyük yatırım yapma.
@@ -162,9 +156,12 @@ temsilini değiştirir ve mevcut eşleşmeleri bozar.
 
 **Bilinen tuzaklar:**
 
-- **PowerShell 5.1 `Get-Content -Raw` bu dosyaları ANSI okuyor.** `CLAUDE.md` gibi Türkçe
-  içeren dosyaları PowerShell ile kesip yazmaya çalışma — Edit aracını kullan. Bu oturumda
-  `Substring` denemesi patladı ve dosyayı boşaltmasına ramak kaldı.
+- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA — sadece Edit kullan.** Bu oturumda üç kez
+  patladı: (1) `Get-Content -Raw` Türkçeyi ANSI okuyup `lib.rs` ve `Cargo.toml`'u mojibake
+  yaptı; (2) `Set-Content -Encoding utf8` JSON'lara **BOM** yazdı ve Tauri derlemesi
+  "unable to parse JSON ... line 1 column 1" ile kırıldı; (3) `Substring` hatası `CLAUDE.md`'yi
+  boşaltmasına ramak kaldı. Sürüm yükseltmek gibi "basit" bir `-replace` bile bunu tetikler.
+  Kurtarma yolu: `git checkout -- <dosya>` sonra Edit ile tekrar yap.
 - **Claude'un izin sınıflandırıcısı `Remove-Item`'ı engelliyor.** Dosya silme gerektiren
   adımları kullanıcıya komut olarak ver, döngüye girme.
 
