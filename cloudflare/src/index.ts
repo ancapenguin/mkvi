@@ -108,10 +108,9 @@ function isSignalPayload(value: unknown): boolean {
     return keys.length === 2 && keys.includes("sdp") && typeof payload.sdp === "string" && payload.sdp.length > 0 && payload.sdp.length <= 32_768;
   }
   if (payload.kind === "identity") {
-    return keys.every((key) => key === "kind" || key === "publicKey" || key === "signature" || key === "rendezvous")
+    return keys.every((key) => key === "kind" || key === "publicKey" || key === "signature")
       && typeof payload.publicKey === "string" && OPAQUE_ID.test(payload.publicKey)
-      && typeof payload.signature === "string" && /^[A-Za-z0-9_-]{86}$/.test(payload.signature)
-      && (payload.rendezvous === undefined || (typeof payload.rendezvous === "string" && OPAQUE_ID.test(payload.rendezvous)));
+      && typeof payload.signature === "string" && /^[A-Za-z0-9_-]{86}$/.test(payload.signature);
   }
   if (payload.kind !== "ice" || keys.length !== 2 || !keys.includes("candidate") || typeof payload.candidate !== "object" || payload.candidate === null || Array.isArray(payload.candidate)) return false;
   const candidate = payload.candidate as Record<string, unknown>;
