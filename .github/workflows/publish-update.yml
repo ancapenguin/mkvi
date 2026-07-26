@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,10 +29,11 @@ jobs:
       - name: Publish public update feed
         shell: pwsh
         env:
-          MKVI_UPDATES_DEPLOY_KEY: ${{ secrets.MKVI_UPDATES_DEPLOY_KEY }}
+          MKVI_UPDATES_DEPLOY_KEY_B64: ${{ secrets.MKVI_UPDATES_DEPLOY_KEY_B64 }}
         run: |
+          $ErrorActionPreference = 'Stop'
           $keyPath = Join-Path $env:RUNNER_TEMP 'mkvi-updates'
-          Set-Content -Path $keyPath -Value $env:MKVI_UPDATES_DEPLOY_KEY -NoNewline
+          [System.IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:MKVI_UPDATES_DEPLOY_KEY_B64))
           icacls $keyPath /inheritance:r /grant:r "$env:USERNAME`:(R)" | Out-Null
           New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.ssh" | Out-Null
           ssh-keyscan github.com | Out-File -Append -Encoding ascii "$env:USERPROFILE\.ssh\known_hosts"
