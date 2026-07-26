@@ -17,18 +17,21 @@ iletişim uygulaması. **"Bitti" tanımı:**
 
 ## Durum (2026-07-27)
 
-Sürüm 0.1.4, 4 commit yerelde, **push edilmedi**. Gate yeşil: `tsc` · 58 test · cargo 6/6 ·
-worker dry-run. **İndirilebilir tek sürüm hâlâ 0.1.2 ve onda sohbet çalışmıyor.**
+**0.1.4 yayında ve indirilebilir** (CI `30222203504` yeşil, link 200 + `MZ`). Gate yeşil:
+`tsc` · 58 test · cargo 6/6 · worker dry-run. Sıradaki iş Faz 0'ın ikinci kutusu:
+kuzenle canlı deneme — özellikle **kapat-aç testi**, çünkü keyring düzeltmesinin gerçekten
+işe yaradığı yalnızca böyle anlaşılır.
 
 ---
 
 ## Faz 0 — Yayın (her şeyin önünde)
 
-- [ ] **0.1.4'ü yayınla.** `git push` + `git tag v0.1.4 && git push origin v0.1.4`.
-      Kabul: `gh run list --limit 1` yeşil, ve
+- [x] **0.1.4 yayınlandı.** CI run `30222203504` **success**. Link doğrulandı:
+      `http=200`, 3.804.705 bayt, `MZ` başlığı. `latest.json` → `version: 0.1.4`,
+      URL raw feed'i gösteriyor, **BOM yok**. Yayın workflow'u onarımı böylece CI'da doğrulandı.
+      **Kuzene gidecek link:**
       `https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.4_x64-setup.exe`
-      200 + `MZ` başlığı döndürüyor. **Bu düzeltilmiş workflow CI'da hiç çalışmadı; ilk yeşil
-      derleme onu doğrulayacak.**
+      (SmartScreen uyarısı normaldir — imza sertifikası yok, bkz. Faz 7.)
 - [ ] **Kuzenle canlı dene ve sonucu yaz.** Tek teşhis verisi hangi ekranda takıldıkları.
       Özellikle: uygulamayı kapat-aç, kod istemeden bağlanıyor mu? (keyring düzeltmesinin
       gerçek testi budur.)

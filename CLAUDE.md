@@ -89,18 +89,17 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 **Bu blok kısadır çünkü plan artık `ROADMAP.md`'de.** Oturuma şöyle başla: `git status` +
 `git log --oneline -5`, sonra **`ROADMAP.md`'yi aç ve işaretlenmemiş ilk kutudan devam et.**
 
-**Durum:** Sürüm 0.1.4. Çalışma ağacı temiz, **4 commit yerelde ve PUSH EDİLMEDİ**
-(kullanıcının kararıydı, ama artık yayın Faz 0'ın ilk maddesi). Tam gate YEŞİL:
+**Durum:** Sürüm **0.1.4 yayında** (CI 30222203504 yeşil, indirme linki 200 + MZ ile
+doğrulandı). Her şey commit'li ve push'lu. Tam gate YEŞİL:
 `tsc` temiz · `npm test` 58/58 · `cargo test` 6/6 · worker dry-run OK.
 
-**İLK İŞ:** `ROADMAP.md` → Faz 0 → "0.1.4'ü yayınla". Kullanıcı onaylarsa `git push` ve
-`v0.1.4` tag'ini at, sonra `gh run list --repo ancapenguin/mkvi --limit 1` ile izle.
+**İLK İŞ:** `ROADMAP.md` → Faz 0 → **"Kuzenle canlı dene ve sonucu yaz"**. Kullanıcıya
+kuzeniyle denemesini hatırlat ve şunu sor: uygulamayı kapatıp açınca kod istemeden bağlandı mı?
+Bu, keyring düzeltmesinin tek gerçek testidir.
 
-**Neden acil:** indirilebilir tek sürüm hâlâ **0.1.2** ve **onda sohbet hiç çalışmıyor** —
-mesaj kimliği düzeltmesi (`randomTransferId`, `84e63ac`) v0.1.2'den sonra geldi ve v0.1.3 CI'ı
-kırık olduğu için hiç yayınlanmadı. Feed deposunda yalnızca 0.1.0 / 0.1.1 / 0.1.2 var.
-v0.1.3'ü kıran hata (`$env:VERSION` tanımsız, installer feed'e kopyalanmıyor) düzeltildi ama
-**bu düzeltme CI'da hiç çalışmadı.**
+**Yayın hattı artık doğrulandı:** v0.1.3 CI'ını kıran hata (`$env:VERSION` tanımsız, installer
+feed reposuna kopyalanmıyor) düzeltildi ve v0.1.4 derlemesiyle CI'da kanıtlandı. Feed'de artık
+0.1.0 / 0.1.1 / 0.1.2 / 0.1.4 var ve `latest.json` 0.1.4'ü BOM'suz gösteriyor.
 
 **Bu oturumda çözülen iki kök neden (ikisi de "kapatınca yine kod istiyor" şikâyetine çıkıyor):**
 
