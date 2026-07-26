@@ -44,15 +44,27 @@ jobs:
           $keyForSsh = $keyPath.Replace('\', '/')
           $env:GIT_SSH_COMMAND = "ssh -i `"$keyForSsh`" -o IdentitiesOnly=yes"
           git clone git@github.com:ancapenguin/mkvi-updates.git update-feed
-          $version = $env:VERSION
-          $source = 'src-tauri\target\release\bundle\nsis\MKVI_' + $version + '_x64-setup.exe'
-          $signature = (Get-Content ($source + '.sig') -Raw).Trim()
-          $downloadUrl = "https://github.com/ancapenguin/mkvi/releases/download/$($env:TAG)/MKVI_$($version)_x64-setup.exe"
+          # tauri.conf.json is the single source of truth for the version. Reading it
+          # from an env var left the file name as "MKVI__x64-setup.exe" and broke v0.1.3.
+          $version = (Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          if (-not $version) { throw 'Could not read version from src-tauri/tauri.conf.json' }
+          $installer = "MKVI_${version}_x64-setup.exe"
+          $source = "src-tauri\target\release\bundle\nsis\$installer"
+          if (-not (Test-Path $source)) { throw "Installer not found at $source" }
+          if (-not (Test-Path "$source.sig")) { throw "Signature not found at $source.sig" }
+          $signature = (Get-Content "$source.sig" -Raw).Trim()
+          # The binary itself has to live in the public feed repo: release assets of a
+          # private repo return 404 to the unauthenticated updater and to any guest link.
+          New-Item -ItemType Directory -Force -Path update-feed\windows-x86_64 | Out-Null
+          Copy-Item $source (Join-Path 'update-feed\windows-x86_64' $installer) -Force
+          $downloadUrl = "https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/$installer"
           $metadata = @{ version = $version; notes = "MKVI $version"; pub_date = (Get-Date).ToUniversalTime().ToString('o'); platforms = @{ 'windows-x86_64' = @{ url = $downloadUrl; signature = $signature } } } | ConvertTo-Json -Depth 5
-          Set-Content -Path update-feed\latest.json -Value $metadata -NoNewline
+          Set-Content -Path update-feed\latest.json -Value $metadata -NoNewline -Encoding utf8NoBOM
           Set-Location update-feed
           git config user.name 'MKVI updater'
           git config user.email 'actions@github.com'
-          git add latest.json
+          git add windows-x86_64 latest.json
+          if (-not (git status --porcelain)) { Write-Host 'Feed already up to date.'; exit 0 }
           git commit -m "Publish MKVI $version"
           git push
+          Write-Host "Published: $downloadUrl"

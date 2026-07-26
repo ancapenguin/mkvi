@@ -118,7 +118,7 @@ export function isRelayEnvelope(value: unknown): value is { type: "relay"; paylo
 }
 
 /** Signaling only: reject arbitrary JSON so the Worker cannot become a content tunnel. */
-function isSignalPayload(value: unknown): boolean {
+export function isSignalPayload(value: unknown): boolean {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const payload = value as Record<string, unknown>;
   const keys = Object.keys(payload);

@@ -38,8 +38,11 @@ MKVI cihaz A  -- DTLS/SRTP ve DataChannel -->  MKVI cihaz B
 3. **P2P mesajlaşma:** WebRTC DataChannel, sıralı mesajlar, şifreli SQLite geçmişi ve yeniden bağlanma.
 4. **Dosya:** parça-kimlikleri, akış geri basıncı, bütünlük kontrolü ve devam ettirme metadatası.
 5. **Arama:** ses, görüntü, cihaz seçimi, bağlantı istatistikleri ve ekran paylaşımı.
-6. **Android denemesi:** pairing, DataChannel, kamera/mikrofon izni; gerekirse ekran paylaşımı eklentisi. Başarısızlıkta Flutter'a geçiş kararı burada yeniden ele alınır.
-7. **Sertleştirme:** bağımsız güvenlik incelemesi, rate-limit testleri, paket imzalama ve yedekleme olmayan geri yükleme stratejisi.
+6. **Kullanım kalitesi (devam ediyor):** dosya aktarım ilerleme çubuğu, WebView otomatik-tamamlama kapatma, mikrofonsuz cihazda aramanın çökmemesi, kendi kullanıcı adını belirleme (`profile` kontrol mesajı), yeniden bağlanmanın kod istemeden çalışması.
+7. **Kimlik görünümü:** profil fotoğrafı. Karar bekliyor — fotoğraf DataChannel üzerinden küçük bir kare (≤64 KB, yeniden boyutlanmış) olarak gönderilir ve yerelde şifreli SQLite'ta saklanır; sunucuya hiçbir şey gitmez. Bu, `profile` mesajının doğal devamı.
+8. **Android denemesi:** pairing, DataChannel, kamera/mikrofon izni; gerekirse ekran paylaşımı eklentisi. Başarısızlıkta Flutter'a geçiş kararı burada yeniden ele alınır.
+   - **Ses rölesi sorusu:** Android tarafına ayrı bir "audio relay" bileşeni eklenmeyecek. Ses zaten WebRTC'nin SRTP akışıdır; doğrudan bağlantı kurulamazsa çözüm TURN'dür, uygulamaya gömülü bir röle değil. TURN kararı kullanıcıya ait ve şu an kapalı; ayar alanı `src/domain/ice.ts` içinde hazır duruyor.
+9. **Sertleştirme:** bağımsız güvenlik incelemesi, rate-limit testleri, paket imzalama ve yedekleme olmayan geri yükleme stratejisi.
 
 ## Çalıştırma
 

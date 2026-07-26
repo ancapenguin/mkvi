@@ -71,7 +71,8 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 - **2026-07-26 — ayarlanabilir ICE:** `src/domain/ice.ts` + ayarlar panelinde ICE sunucusu alanı. Koda hiçbir TURN sağlayıcısı gömülmedi; alan boşken davranış eskisiyle birebir aynı (yalnız STUN, saf P2P). Kullanıcı kendi TURN sunucusunu kurmama kararı aldı — alan, ileride gerek olursa yeni sürüm derlemeden çözüm yapıştırabilmek için var.
 - **2026-07-26 gece — uygulama İLK KEZ gerçekten bağlandı.** Üç ayrı kusur çözüldü: `PairingRoom`'un `admitted` sayacı kapanışta azalmadığı için tek bir yeniden deneme kodu 15 dk ölü hale getiriyordu (`MAX_ADMISSIONS = 8`); Rust'ın `STANDARD_NO_PAD` base64'ü (`+`,`/`) Worker'ın base64url filtresine takıldığı için eşleşmelerin ~%93'ü kimlik alışverişinde sessizce ölüyordu (Worker iki alfabeyi de kabul ediyor); `sendChat` tireli `crypto.randomUUID()` üretip alıcıdaki `parseControl`'e reddettirdiği için hiçbir mesaj ulaşmıyordu (`randomTransferId`). Worker iki kez yayına alındı.
 - **0.1.3 arayüz onarımı:** grid'e açık sütun tanımlandı (sohbet örtük ikinci sütuna sıkışıyordu), sayfa kaydırması kapatıldı, global `input` kuralının `hidden`'ı ezmesi engellendi, kişi adı düzenlenebilir yapıldı (yerelde saklanır, tel üzerinden gitmez), kayıtlı eşe yeniden bağlanma durumu görünür oldu. Suite 30 → 40 TS.
-- **Faz 6 (Android denemesi) ve Faz 7 (sertleştirme) başlamadı.**
+- **0.1.4 — kullanım kalitesi + yayın hattı onarımı:** yeniden bağlanma el sıkışması artık *varlık* üzerine tetikleniyor (oda posta kutusu tutmuyor; karşı taraf çevrimdışıyken atılan kimlik/teklif çöpe gidiyordu, eşleşmelerin yarısı sessizce ölüyordu), kimlik doğrulanmadan gelen sinyaller atılmak yerine kuyruğa alınıyor, dosya aktarımında ilerleme çubuğu, WebView otomatik-tamamlama her alanda kapatıldı, mikrofonsuz cihazda arama artık düşmüyor (yalnız-video'ya geriliyor), kullanıcı kendi adını belirliyor ve `profile` kontrol mesajıyla karşıya gönderiyor (takma ad yerelde kalıyor). v0.1.3 CI'ı `$env:VERSION` boş olduğu için kırılmıştı ve installer feed reposuna hiç kopyalanmıyordu — ikisi de düzeltildi. Suite 40 → 58 (worker paketine ilk 12 test).
+- **Faz 8 (Android denemesi) ve Faz 9 (sertleştirme) başlamadı.** Faz 7 (profil fotoğrafı) karar bekliyor.
 
 ---
 
@@ -80,100 +81,82 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 > ⚠️ **BU BÖLÜM TEK OTURUM BLOĞU İÇERİR. Yeni handoff yazarken eski tarihli bloğu SİL,
 > ÜSTÜNE EKLEME. >1 tarihli blok görürsen fazlasını SİL.**
 
-### 2026-07-26 (gece)
+### 2026-07-27
 
-**Durum:** Tam gate YEŞİL — `tsc` temiz, `npm test` 40/40, `cargo test` 6/6, worker dry-run OK.
-Çalışma ağacı **temiz**, her şey commit'li ve `main` push'lu (son commit `84e63ac`).
+**Durum:** Sürüm **0.1.4**'e yükseltildi (4 yerde), çalışma ağacı **commit'siz**. Tam gate YEŞİL:
+`tsc` temiz · `npm test` 58/58 (6 dosya, worker paketi dahil) · `cargo test` 6/6 · worker dry-run OK.
 
-**İLK İŞ:** `gh run list --repo ancapenguin/mkvi --limit 2` ile **v0.1.3 derlemesinin
-(`30220047653`) bittiğini doğrula.** Başarılıysa şu linkin anonim indiğini test et:
-`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.3_x64-setup.exe`
-(200 + `MZ` başlığı bekleniyor). Başarısızsa `gh run view <id> --log-failed` oku.
-Kullanıcı bu linki kuzenine gönderecek; SmartScreen uyarısı normaldir (imza sertifikası yok).
+**İLK İŞ:** Değişiklikleri commit'le ve `v0.1.4` tag'ini push et; sonra
+`gh run list --repo ancapenguin/mkvi --limit 1` ile derlemeyi izle. **v0.1.3 CI'ı BAŞARISIZDI**
+(`30220047653`) — yani kuzene gönderilecek 0.1.3 installer'ı hiç var olmadı.
 
-**DAĞITIM GERÇEĞİ — unutma:** `ancapenguin/mkvi` deposu **private**. Bu yüzden GitHub Releases
-asset linkleri dışarıya **404** verir. Installer, public `ancapenguin/mkvi-updates` deposuna
-commit'lenir ve `latest.json` oradaki raw URL'yi gösterir. Bu bilinçli bir geri dönüştür;
-**Releases'e taşımayı yeniden önerme** (bu oturumda denendi, kırdı, geri alındı).
+**v0.1.3 NEDEN KIRILDI (düzeltildi, ama doğrulanmadı):** `.github/workflows/publish-update.yml`
+içinde `$env:VERSION` hiçbir yerde tanımlı değildi; dosya adı `MKVI__x64-setup.exe` olarak
+üretilip `Get-Content` "path not found" ile patlıyordu. Ayrıca adım installer'ı feed reposuna
+**hiç kopyalamıyordu**, sadece private repo'nun 404 veren Releases linkini `latest.json`'a
+yazıyordu. Artık sürüm `src-tauri/tauri.conf.json`'dan okunuyor, `.exe` public
+`mkvi-updates/windows-x86_64/` altına kopyalanıyor ve `latest.json` raw URL'yi gösteriyor.
+**Bu düzeltme CI'da hiç çalışmadı — ilk yeşil derleme onu doğrulayacak.**
 
-**ÇÖZÜLEN KÖK NEDEN (2026-07-26 akşam):** "Signaling sunucusuna bağlanılamadı." hatasının ve
-kuzenle yaşanan ilk eşleşme başarısızlığının gerçek sebebi bulundu: `PairingRoom` odaya giren
-bağlantıyı `admitted` olarak diske yazıyor ama kapanışta **azaltmıyordu**; eşik 2 olduğu için
-tek bir yeniden deneme kodu 15 dakikalığına ölü hale getiriyordu. `MAX_ADMISSIONS = 8` ile
-düzeltildi (`cloudflare/src/index.ts`), Worker yayına alındı ve canlı doğrulandı (4/4 yeniden
-bağlanma başarılı). **Bu sunucu tarafı bir düzeltmedir; istemci güncellemesi gerektirmez.**
+**Kuzene gidecek link (derleme yeşile dönünce doğrula, 200 + `MZ` başlığı bekleniyor):**
+`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.4_x64-setup.exe`
+SmartScreen uyarısı normaldir (imza sertifikası yok).
 
-**ÇÖZÜLEN KÖK NEDEN 2 — asıl katil:** Rust, açık anahtarı ve imzayı `STANDARD_NO_PAD` ile
-kodluyor (`security.rs:108`, `lib.rs:26`) — yani alfabede `+` ve `/` var. Worker ise
-base64url bekliyordu (`/^[A-Za-z0-9_-]{86}$/`). İçinde `+` veya `/` geçen her imza
-`close(1008, "Disallowed signaling envelope")` yiyordu; 86 karakterlik bir imzanın buna
-takılmama şansı `(62/64)^86` ≈ %7. Yani eşleştirmelerin ~%93'ü kimlik alışverişinde sessizce
-ölüyordu ve kullanıcı sadece "Kodu oluşturan cihazın bağlantıyı başlatması bekleniyor."
-ekranında kalıyordu. Worker'da `KEY_B64` / `SIGNATURE_B64` her iki alfabeyi de kabul edecek
-şekilde genişletildi (daraltma değil — eski istemciler kırılmaz), yayına alındı
-(`c7abefd4`), iki istemcili canlı testle doğrulandı.
-**İstemci tarafını DEĞİŞTİRME:** Rust'ı base64url'e çevirmek kayıtlı eşlerin `public_key`
-temsilini değiştirir ve mevcut eşleşmeleri bozar.
+**BU OTURUMDA ÇÖZÜLEN KÖK NEDEN — "uygulamayı kapatınca yine kod istiyor":**
+`PeerRendezvous` odası 30 gün yaşıyor ama **posta kutusu yok**: karşı taraf çevrimdışıyken
+relay edilen her şey çöpe gidiyor. Eski kod `connectKnown` çözülür çözülmez kimliği yayınlayıp
+`transport.start()` çağırıyordu; önce açılan cihazın teklifi boşluğa gidiyor, ikinci cihaz
+açıldığında kimse yeniden teklif etmiyordu. Anahtar sırasına göre eşleşmelerin yaklaşık yarısı
+bu yüzden sessizce ölüyor ve kullanıcı yeniden kod girmek zorunda kalıyordu. Artık el sıkışma
+*varlık* olayında tetikleniyor ve eş her göründüğünde tekrarlanıyor (`src/App.tsx:109-160`).
+İkinci kusur aynı yerdeydi: kimlik doğrulaması `await` sürerken gelen offer/ICE **atılıyordu**;
+artık `deferred` kuyruğunda bekleyip doğrulama bitince işleniyor.
+**TUZAK:** `online` sayacı bu odada *kendini de sayar* (`PeerRendezvous.onlineDevices`), eşin
+var olması `online > 1` demektir. `PairingRoom` ise farklı semantik kullanır — karıştırma.
 
 **Sonra sırayla:**
 
-1. **0.1.3'ü kuzenle canlı dene ve SONUCU SOR.** Hangi ekranda takıldıkları tek teşhis
-   verisi. İfade ekranı gelmiyorsa sinyalleşme; gelip sonra takılıyorsa WebRTC/NAT
-   (o zaman ve yalnız o zaman TURN gündeme gelir — aşağıdaki karara bak).
-2. **`cloudflare/` paketine test yaz.** Bu oturumdaki üç kusur da (`admitted` sayacı, base64
-   alfabe uyuşmazlığı, UUID'li mesaj kimliği) tip kontrolünden ve testlerden sağ çıktı; Worker'ın
-   `isSignalPayload`/`isRelayEnvelope` fonksiyonlarının **hiç testi yok**. Vitest ekle ve kilitle:
-   standart alfabeli (`+`,`/`) 43/86 karakterlik kimlik zarfı KABUL edilir; yanlış uzunluk
-   reddedilir; aynı kodla 3+ yeniden bağlanma çalışır.
-3. **Arayüz gerçek pencerede hiç görülmedi.** 0.1.3'teki grid düzeltmesi yalnızca akıl yürütmeyle
-   doğrulandı (`ChatCallWorkspace.css`, açık `grid-template-columns`). Aramada sohbetin yan panel
-   olduğunu, sayfanın kaymadığını, başlığın sabit kaldığını gözle doğrula.
-4. **Uçtan uca dosya aktarımı hiç denenmedi.** `file_sink_*` yalnızca birim testli; ≥100 MB'lık
-   gerçek aktarım yapılmadı. Kusur çıkarsa: `src/services/peer-transport.ts` `flushReceive`
-   sıralaması ve `src-tauri/src/lib.rs` `file_sink_write`.
-5. `mkvi-updates` reposu her sürümde ~3,8 MB büyüyor ve geçmiş küçülmez. Depo private olduğu
-   sürece alternatif yok. **Karar noktası:** ya `mkvi` public yapılır (Releases çalışır), ya
-   feed deposuna Releases açmak için PAT secret'ı eklenir, ya da olduğu gibi bırakılır. Kullanıcıya sor.
+1. **0.1.4'ü kuzenle canlı dene ve SONUCU SOR.** Özellikle: uygulamayı kapatıp açınca kod
+   istemeden bağlanıyor mu? Bu oturumun ana iddiası bu ve **gerçek iki cihazla hiç denenmedi**.
+2. **Arayüz hâlâ gerçek pencerede görülmedi.** İlerleme çubuğu, "Sen: <ad>" rozeti ve arama
+   sırasındaki yan panel yalnızca akıl yürütmeyle doğrulandı (`ChatCallWorkspace.css`, grid
+   satırları 5'e çıktı). Tarayıcıda doğrulanamaz: `loadDeviceIdentity` Tauri komutu, bu yüzden
+   iki gerçek pencere gerekir.
+3. **Uçtan uca dosya aktarımı hiç denenmedi** (≥100 MB). Kusur çıkarsa:
+   `src/services/peer-transport.ts` `flushReceive` sıralaması ve `src-tauri/src/lib.rs`
+   `file_sink_write`. İlerleme çubuğu artık `file-progress` olayını gösteriyor, teşhis kolaylaştı.
+4. **Profil fotoğrafı (Faz 7) karar bekliyor** — `ARCHITECTURE.md:38`. Önerilen: DataChannel
+   üzerinden ≤64 KB yeniden boyutlanmış kare, şifreli SQLite'ta yerel saklama, sunucuya hiçbir
+   şey gitmez. `profile` kontrol mesajı zaten var, doğal uzantısı.
 
-**Açık işler (kod dışı, kullanıcı kararı bekliyor):**
+**Açık işler (kullanıcı kararı bekliyor):**
 
-- **Özel anahtarlar silindi — yerelde imzalı derleme ARTIK MÜMKÜN DEĞİL.** `.secrets/` içinde
-  yalnızca `.pub` dosyaları kaldı. İmza anahtarı sadece GitHub Secrets'ta
-  (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, `MKVI_UPDATES_DEPLOY_KEY_B64`).
-  Yani **her yayın CI'dan geçmek zorunda**: sürümü 4 yerde yükselt
-  (`package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, `src-tauri/src/lib.rs`
-  `application_info`), commit'le, `v*` tag'i push et. `npm run tauri build` yerelde imza
-  olmadığı için başarısız olur; bu beklenen davranıştır, düzeltmeye çalışma.
-- **Flutter/UI yeniden yazımı gündemde.** Kullanıcı Tauri'nin Windows dışında sorun
-  çıkaracağından endişeli; "çekirdek Rust kalsın, UI Flutter olsun" fikrini attı, acelesi yok.
-  Bu Faz 6'nın (`ARCHITECTURE.md:41`) asıl karar noktası. Karar verilmeden UI'a büyük yatırım yapma.
-- **TURN kararı: KAPANDI, yeniden açma.** Kullanıcı hem Cloudflare Realtime TURN'ü (0,05 USD/GB)
-  hem kendi sunucusunu reddetti ("siktir et turnu"). Kod tarafında yalnızca **ayarlanabilir ICE
-  alanı** var, sunucu yok, koda gömülü sağlayıcı yok. Bu konuyu **sadece** kuzenle yapılan gerçek
-  deneme "ifade ekranı geldi ama bağlanmadı" ile sonuçlanırsa gündeme getir; başka hiçbir durumda açma.
-  (Araştırma yapıldı: Netcup Nürnberg ~2,60 €/ay + coturn 4.15 Docker + REST/HMAC kimlik önerisi
-  çıktı. Rapor oturum scratchpad'indeydi, kalıcı değil.)
+- **`mkvi-updates` reposu artık her sürümde ~3,8 MB büyüyecek** (installer commit'leniyor) ve
+  geçmiş küçülmez. Seçenekler: (a) `mkvi` public yapılır, Releases çalışır; (b) feed deposuna
+  Releases açmak için PAT secret'ı eklenir; (c) olduğu gibi bırakılır. **Kullanıcıya sor.**
+- **Flutter/UI yeniden yazımı gündemde.** Faz 8'in (`ARCHITECTURE.md:41`) asıl karar noktası.
+  Karar verilmeden UI'a büyük yatırım yapma.
+- **TURN kararı: KAPALI, yeniden açma.** Yalnızca kuzenle yapılan gerçek deneme "ifade ekranı
+  geldi ama bağlanmadı" ile sonuçlanırsa gündeme gelir. Kodda yalnızca ayarlanabilir ICE alanı var.
+- **Ses rölesi (Android) sorusu cevaplandı:** ayrı bir röle bileşeni eklenmeyecek; ses zaten
+  WebRTC SRTP'dir, doğrudan bağlantı kurulamazsa cevap TURN'dür. `ARCHITECTURE.md:42`.
+- **Özel imza anahtarları yerelde YOK.** Her yayın CI'dan geçmek zorunda; `npm run tauri build`
+  yerelde imzasız olduğu için başarısız olur, bu beklenen davranıştır.
 
 **Bilinen tuzaklar:**
 
-- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA — sadece Edit kullan.** Bu oturumda üç kez
-  patladı: (1) `Get-Content -Raw` Türkçeyi ANSI okuyup `lib.rs` ve `Cargo.toml`'u mojibake
-  yaptı; (2) `Set-Content -Encoding utf8` JSON'lara **BOM** yazdı ve Tauri derlemesi
-  "unable to parse JSON ... line 1 column 1" ile kırıldı; (3) `Substring` hatası `CLAUDE.md`'yi
-  boşaltmasına ramak kaldı. Sürüm yükseltmek gibi "basit" bir `-replace` bile bunu tetikler.
-  Kurtarma yolu: `git checkout -- <dosya>` sonra Edit ile tekrar yap.
-- **Claude'un izin sınıflandırıcısı `Remove-Item`'ı engelliyor.** Dosya silme gerektiren
-  adımları kullanıcıya komut olarak ver, döngüye girme.
-
-- **Codex CLI bu makinede `--full-auto` ile dosya YAZAMIYOR.** Windows sandbox'ı
-  "split writable root sets" hatası verip reddediyor (`CreateProcessAsUserW failed: 5`).
-  Lane'ler patch uygulayamadan döngüye girer. Çözüm `--dangerously-bypass-approvals-and-sandbox`
-  ama bunu Claude Code'un izin sınıflandırıcısı da engelliyor — kullanılacaksa önce
-  `.claude/settings.json`'a Bash izin kuralı eklenmeli. Mekanik düzenlemeleri doğrudan
-  Edit ile yapmak daha hızlı ve Türkçe karakterler açısından daha güvenli.
-- **Codex lane çıktısına güvenme, doğrula.** Bu oturumda bir lane `rendezvous` şartını
-  silerken imza kontrolünü sessizce kopyaladı (`cloudflare/src/index.ts`, iki özdeş satır).
-  Typecheck ve testler yine de geçiyordu. Lane raporu iddiadır, kanıt değil — diff'i oku.
-- **Mojibake tekrar etmeye meyilli.** Türkçe string içeren bir dosyayı düzenleyen her
-  araçtan sonra `grep -n 'Ã\|Å\|Ä' <dosya>` çalıştır.
-- Git bu repoda LF→CRLF uyarısı basıyor; bu normal, düzeltmeye çalışma.
+- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA — sadece Edit kullan.** `Get-Content -Raw` Türkçeyi
+  ANSI okuyup mojibake yapar; `Set-Content -Encoding utf8` JSON'lara BOM yazıp Tauri derlemesini
+  kırar. Kurtarma: `git checkout -- <dosya>` sonra Edit.
+- **Görünmez karakter içeren regex'i Edit ile yazma.** Bu oturumda `safeDisplayName`'in bidi/
+  zero-width sınıfı iki kez bozuldu; çözüm kod noktası karşılaştırmasına geçmek oldu
+  (`src/services/peer-transport.ts`, `safeDisplayName`). Test dosyasında `​` gibi kaçışlar
+  güvenli, ama Bash heredoc'a ham kontrol karakteri koyma — araç reddediyor.
+- **Codex CLI bu makinede dosya YAZAMIYOR.** `--full-auto` deprecated ve arka planda stdin'de
+  asılıyor (`< /dev/null` şart); `--sandbox workspace-write` ile çalışsa bile `apply_patch`
+  Windows PowerShell tırnaklaması yüzünden "Invalid patch: The last line of the patch must be
+  '*** End Patch'" verip düşüyor. Bu oturumda worker test lane'i 2 testlik taslakta takıldı,
+  paket elle tamamlandı. **Mekanik düzenlemeleri doğrudan Edit ile yap.**
+- **Mojibake tekrar etmeye meyilli.** Türkçe string içeren bir dosyayı düzenleyen her araçtan
+  sonra `grep -n 'Ã\|Å\|Ä' <dosya>` çalıştır; çıktı boş olmalı.
+- Git bu repoda LF→CRLF uyarısı basıyor; normal, düzeltmeye çalışma.

@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy", "check": "wrangler deploy --dry-run" },
-  "devDependencies": { "typescript": "^5.8.3", "wrangler": "^4.28.1" }
+  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy", "check": "wrangler deploy --dry-run", "test": "vitest run" },
+  "devDependencies": { "typescript": "^5.8.3", "vitest": "^4.1.10", "wrangler": "^4.28.1" }
 }
