@@ -28,7 +28,9 @@ cd cloudflare; npm run check   # wrangler deploy --dry-run
 | UI / orkestrasyon | `src/App.tsx` | Pairing, SAS onayı, otomatik yeniden keşif |
 | Tipler | `src/domain/` | Platformdan bağımsız signaling + peer protokol tipleri |
 
-Detaylı mimari karar ve yol haritası: `ARCHITECTURE.md`.
+Detaylı mimari karar: `ARCHITECTURE.md`.
+**Bitirme planı, verilmiş kararlar ve çalışma kuralları: `ROADMAP.md` — işaretlenmemiş ilk
+kutu sıradaki iştir.**
 
 ## Değişmez kurallar
 
@@ -43,8 +45,9 @@ Detaylı mimari karar ve yol haritası: `ARCHITECTURE.md`.
 Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğuyla yürütür.
 
 1. **Oturum başında:** önce `git status` + `git log --oneline -10`, sonra en alttaki
-   "Sıradaki Oturum Planı (handoff)" bloğunu oku ve oradan devam et. Kullanıcıya
-   "ne yapıyorduk?" diye sorma — handoff bunu zaten söylüyor olmalı.
+   "Sıradaki Oturum Planı (handoff)" bloğunu, ardından **`ROADMAP.md`'yi** oku ve
+   işaretlenmemiş ilk kutudan devam et. Kullanıcıya "ne yapıyorduk?" diye sorma.
+   Bir kutu bitince `[x]` yap ve altına tek satır kanıt yaz.
 2. **Yeşil checkpoint'lerde commit öner, push etme.** Tam gate (yukarıdaki dört komut)
    yeşile döndüğünde commit önerisi yap. Push kullanıcının kararıdır; istenmeden push edilmez.
 3. **Biten adımın handoff'unu SİL — yeni bloğu üstüne EKLEME.** Handoff stack'lemek
@@ -83,149 +86,39 @@ Bu proje oturumlar arası devri `CLAUDE.md`'nin en altındaki tek handoff bloğu
 
 ### 2026-07-27
 
-**Durum:** Sürüm **0.1.4**'e yükseltildi (4 yerde). Çalışma ağacı temiz; commit `150cc6e`
-**yerelde duruyor, PUSH EDİLMEDİ** (kullanıcının kararı). Tam gate YEŞİL:
-`tsc` temiz · `npm test` 58/58 (6 dosya, worker paketi dahil) · `cargo test` 6/6 · worker dry-run OK.
+**Bu blok kısadır çünkü plan artık `ROADMAP.md`'de.** Oturuma şöyle başla: `git status` +
+`git log --oneline -5`, sonra **`ROADMAP.md`'yi aç ve işaretlenmemiş ilk kutudan devam et.**
 
-**İLK İŞ:** Kullanıcıya yayına hazır olduğunu hatırlat; onay verirse `git push` + `v0.1.4`
-tag'ini push et, sonra `gh run list --repo ancapenguin/mkvi --limit 1` ile derlemeyi izle.
-**v0.1.3 CI'ı BAŞARISIZDI** (`30220047653`) — yani kuzene gönderilecek 0.1.3 installer'ı
-hiç var olmadı. Onay gelmeden push etme.
+**Durum:** Sürüm 0.1.4. Çalışma ağacı temiz, **4 commit yerelde ve PUSH EDİLMEDİ**
+(kullanıcının kararıydı, ama artık yayın Faz 0'ın ilk maddesi). Tam gate YEŞİL:
+`tsc` temiz · `npm test` 58/58 · `cargo test` 6/6 · worker dry-run OK.
 
-**v0.1.3 NEDEN KIRILDI (düzeltildi, ama doğrulanmadı):** `.github/workflows/publish-update.yml`
-içinde `$env:VERSION` hiçbir yerde tanımlı değildi; dosya adı `MKVI__x64-setup.exe` olarak
-üretilip `Get-Content` "path not found" ile patlıyordu. Ayrıca adım installer'ı feed reposuna
-**hiç kopyalamıyordu**, sadece private repo'nun 404 veren Releases linkini `latest.json`'a
-yazıyordu. Artık sürüm `src-tauri/tauri.conf.json`'dan okunuyor, `.exe` public
-`mkvi-updates/windows-x86_64/` altına kopyalanıyor ve `latest.json` raw URL'yi gösteriyor.
-**Bu düzeltme CI'da hiç çalışmadı — ilk yeşil derleme onu doğrulayacak.**
+**İLK İŞ:** `ROADMAP.md` → Faz 0 → "0.1.4'ü yayınla". Kullanıcı onaylarsa `git push` ve
+`v0.1.4` tag'ini at, sonra `gh run list --repo ancapenguin/mkvi --limit 1` ile izle.
 
-**DAĞITIM GERÇEĞİ — indirilebilir tek sürüm hâlâ 0.1.2 ve ONDA SOHBET ÇALIŞMIYOR.** Feed
-deposunda yalnızca 0.1.0 / 0.1.1 / 0.1.2 installer'ları var; `latest.json` 0.1.2'yi gösteriyor.
-Mesaj kimliği düzeltmesi (`randomTransferId`, `84e63ac`) v0.1.2'den *sonra* geldi ve hiç
-yayınlanmadı — yani kuzenin elindeki yapı mesaj gönderemiyor. 0.1.4 yayınlanana kadar bu böyle.
+**Neden acil:** indirilebilir tek sürüm hâlâ **0.1.2** ve **onda sohbet hiç çalışmıyor** —
+mesaj kimliği düzeltmesi (`randomTransferId`, `84e63ac`) v0.1.2'den sonra geldi ve v0.1.3 CI'ı
+kırık olduğu için hiç yayınlanmadı. Feed deposunda yalnızca 0.1.0 / 0.1.1 / 0.1.2 var.
+v0.1.3'ü kıran hata (`$env:VERSION` tanımsız, installer feed'e kopyalanmıyor) düzeltildi ama
+**bu düzeltme CI'da hiç çalışmadı.**
 
-**Kuzene gidecek link (derleme yeşile dönünce doğrula, 200 + `MZ` başlığı bekleniyor):**
-`https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.4_x64-setup.exe`
-SmartScreen uyarısı normaldir (imza sertifikası yok).
+**Bu oturumda çözülen iki kök neden (ikisi de "kapatınca yine kod istiyor" şikâyetine çıkıyor):**
 
-**BU OTURUMDA ÇÖZÜLEN KÖK NEDEN — "uygulamayı kapatınca yine kod istiyor":**
-`PeerRendezvous` odası 30 gün yaşıyor ama **posta kutusu yok**: karşı taraf çevrimdışıyken
-relay edilen her şey çöpe gidiyor. Eski kod `connectKnown` çözülür çözülmez kimliği yayınlayıp
-`transport.start()` çağırıyordu; önce açılan cihazın teklifi boşluğa gidiyor, ikinci cihaz
-açıldığında kimse yeniden teklif etmiyordu. Anahtar sırasına göre eşleşmelerin yaklaşık yarısı
-bu yüzden sessizce ölüyor ve kullanıcı yeniden kod girmek zorunda kalıyordu. Artık el sıkışma
-*varlık* olayında tetikleniyor ve eş her göründüğünde tekrarlanıyor (`src/App.tsx:109-160`).
-İkinci kusur aynı yerdeydi: kimlik doğrulaması `await` sürerken gelen offer/ICE **atılıyordu**;
-artık `deferred` kuyruğunda bekleyip doğrulama bitince işleniyor.
-**TUZAK:** `online` sayacı bu odada *kendini de sayar* (`PeerRendezvous.onlineDevices`), eşin
-var olması `online > 1` demektir. `PairingRoom` ise farklı semantik kullanır — karıştırma.
+1. **`keyring 3` mock store'a düşüyordu** (`c411f48`). Hiçbir varsayılan özellik getirmiyor;
+   platform arka ucu seçilmezse bellek içi mock kullanıyor. Cihaz kimliği ve SQLite anahtarı
+   hiç diske yazılmıyordu → her açılışta yeni kimlik → kayıtlı eş çözülemiyor → kod ekranı.
+   `Cargo.toml`'da artık platform başına açık arka uç var. **Asıl fail muhtemelen buydu.**
+2. **Rendezvous odasının posta kutusu yok** (`150cc6e`). Karşı taraf çevrimdışıyken atılan
+   kimlik/teklif çöpe gidiyordu. El sıkışma artık varlık olayında tetikleniyor
+   (`src/App.tsx:109`). **TUZAK:** `online` sayacı kendini de sayar, eş varsa `online > 1`.
 
-**ÇÖZÜLEN KÖK NEDEN 2 — asıl fail muhtemelen buydu (`c411f48`):** `keyring 3` hiçbir
-varsayılan özellik getirmiyor ve platform arka ucu seçilmezse **sessizce bellek içi mock
-store'a** düşüyor ([docs.rs/keyring/3.6.3](https://docs.rs/keyring/3.6.3/keyring/)). Üç yoldan
-doğrulandı: `Cargo.lock`'ta keyring'in tek bağımlılıkları `log` + `zeroize` idi,
-`cargo tree -e features -i keyring` yalnızca boş `default`'u gösteriyordu, resmî doküman
-davranışı yazıyor. Sonuç: cihaz kimliği ve SQLite anahtarı **hiç diske yazılmıyordu**; her
-açılışta yenisi üretiliyor, kayıtlı eş çözülemiyor, uygulama kod ekranına dönüyordu.
-`Cargo.toml`'da artık platform başına açık arka uç var. **Yeniden bağlanma hâlâ bozuksa önce
-bunun gerçekten düzeldiğini doğrula** (uygulamayı kapat-aç, aynı kimlikle mi geliyor).
+**Sürüm engelleyici güvenlik açığı — `ROADMAP.md` Faz 1:** SAS ifadesi DTLS parmak izlerini
+bağlamıyor, sinyalleşme sunucusunu kontrol eden biri araya girip iki tarafa da aynı ifadeyi
+gösterebilir. Android'e geçmeden kapatılmalı.
 
-**AÇIK GÜVENLİK BULGUSU — sürüm engelleyici sayılmalı:** SAS ifadesi yalnızca
-`transcript | sıralı Ed25519 açık anahtarlar` özeti (`src/App.tsx`, `handleIdentity`). SDP'yi,
-**DTLS sertifika parmak izlerini** ve efemer WebRTC anahtarlarını hiç bağlamıyor. Kötü niyetli
-bir sinyalleşme sunucusu (yani Worker'ı kontrol eden) her iki tarafın SDP'sini değiştirip
-Alice↔saldırgan ve saldırgan↔Bob şeklinde iki bağlantı kurabilir; kimlik mesajlarını olduğu
-gibi aktarır ve **iki tarafta da aynı SAS görünür**. DTLS her bacağı ayrı ayrı korur, uçtan uca
-korumaz. Çözüm: SAS'i DTLS parmak izlerini de kapsayacak şekilde genişlet, ya da `snow` ile
-Noise el sıkışmasına geç ve SAS'i el sıkışma özetinden türet. Android'e geçmeden kapatılmalı.
+**Doğrulanmamış olanlar (iddia etme):** arayüz gerçek pencerede hiç görülmedi; uçtan uca dosya
+aktarımı ≥100 MB ile hiç denenmedi; keyring düzeltmesi gerçek kapat-aç testinden geçmedi.
 
-**Sonra sırayla:**
-
-1. **0.1.4'ü kuzenle canlı dene ve SONUCU SOR.** Özellikle: uygulamayı kapatıp açınca kod
-   istemeden bağlanıyor mu? Bu oturumun ana iddiası bu ve **gerçek iki cihazla hiç denenmedi**.
-2. **Arayüz hâlâ gerçek pencerede görülmedi.** İlerleme çubuğu, "Sen: <ad>" rozeti ve arama
-   sırasındaki yan panel yalnızca akıl yürütmeyle doğrulandı (`ChatCallWorkspace.css`, grid
-   satırları 5'e çıktı). Tarayıcıda doğrulanamaz: `loadDeviceIdentity` Tauri komutu, bu yüzden
-   iki gerçek pencere gerekir.
-3. **Uçtan uca dosya aktarımı hiç denenmedi** (≥100 MB). Kusur çıkarsa:
-   `src/services/peer-transport.ts` `flushReceive` sıralaması ve `src-tauri/src/lib.rs`
-   `file_sink_write`. İlerleme çubuğu artık `file-progress` olayını gösteriyor, teşhis kolaylaştı.
-4. **Profil fotoğrafı (Faz 7) — KULLANICI ONAYLADI, sıradaki geliştirme işi bu.**
-   `ARCHITECTURE.md:38`. Tasarım: DataChannel üzerinden ≤64 KB yeniden boyutlanmış kare
-   (canvas ile yerelde küçült), şifreli SQLite'ta yerel saklama, sunucuya hiçbir şey gitmez.
-   `profile` kontrol mesajı zaten var (`src/domain/peer-transport.ts`), doğal uzantısı —
-   ama fotoğraf 32 KB'lık kontrol mesajı sınırını aşar, ayrı bir ikili çerçeve tipi gerekir
-   (`FILE_FRAME` deseni gibi). `parseControl`'e ham base64 gömme.
-
-**Araştırma sonucu — "hazır ne kullanalım" (2026-07-27, 3 paralel Codex lane'i, iddiaları
-doğrulandı):**
-
-- **WebRTC sarmalayıcısı ALMA.** simple-peer / PeerJS / libdatachannel / werift bu projede
-  çıkan dört hatanın **hiçbirini** engellemezdi; hepsi negotiation'ı sarmalıyor, biz orada
-  kırılmadık. WebView2 WebRTC'yi zaten içeriyor, bize maliyeti sıfır.
-- **Asıl tekerlek icadı sinyalleşme protokolü.** Yapılacak: Magic Wormhole'un posta kutusu /
-  nameplate semantiği — sayaç yerine **süresi dolan kiralama**, kalıcı + ack'li zarflar,
-  yeniden bağlanınca onaylanmamışların tekrarı. `MAX_ADMISSIONS = 8` bir çözüm değil,
-  erteleme: `cloudflare/src/index.ts:102` `disconnect()` sayacı azaltmıyor ve aynı fonksiyonda
-  `setAlarm` her girişte sıfırlandığı için 15 dk **kayan pencere**.
-- **İkinci öncelik: tek kanonik tel sözleşmesi.** Rust / tarayıcı TS / Worker aynı golden
-  vector'lardan geçsin. Base64 alfabesi ve UUID formatı hataları bunun yokluğundan doğdu.
-- **iroh: şimdilik ALMA.** Uç nokta kimliği takasını yine bize bırakıyor, çevrimdışı posta
-  kutusu yok, ve medya WebRTC'de kalacağı için iki ayrı taşıma demek. `iroh-blobs` yalnızca
-  "dosya kaldığı yerden devam etsin" gerçek gereksinim olunca değerli.
-- **Matrix / Tailscale / libp2p / Veilid / Waku: hayır.** İlk ikisi hesap veya tailnet ister,
-  yani "hesapsız" premisini siler; diğerleri iki cihaz için fazla ağır.
-- **UI: kütüphane ALMA.** İki ekran için Radix/shadcn/Mantine/i18next/Zustand hepsi gereksiz.
-  Türkçe stringler için tipli bir katalog yeterli.
-- **Profil fotoğrafı için hazır olan:** `createImageBitmap` (EXIF yönünü kendi çözüyor) +
-  canvas ile 256×256 kırpma + **WebP** (JPEG geri dönüşlü). Yeniden kodlama EXIF/GPS'i
-  kendiliğinden siler — gizlilik gereği bu. Şifreli SQLite'ta BLOB olarak sakla.
-- **SQLCipher'a geç** (`rusqlite` bundled özelliği var). Şu anki uygulama katmanı şifrelemesi
-  günlük/WAL verisini korumuyor. Geçmiş şeması büyümeden yap.
-- **Test: Playwright duman testi ekle.** jsdom CSS grid geometrisini yakalayamaz; bozuk iki
-  panelli düzeni ancak gerçek tarayıcı yakalar.
-- **İmzalama (SmartScreen):** Azure Artifact Signing ~9,99 USD/ay (5.000 imza).
-  **SignPath Foundation ücretsiz ama gerçek açık kaynak şartı var — repo private olduğu için
-  uygun değiliz.** sigstore SmartScreen'i değiştirmiyor.
-- **TURN, Android'de zorunlu hale gelir** (CGNAT, simetrik NAT, UDP engelli kurumsal Wi-Fi).
-  Masaüstü kararı değişmedi; bu konu **yalnızca Android fazı başlarken** açılır.
-
-**Açık işler (kullanıcı kararı bekliyor):**
-
-- **`mkvi-updates` reposu artık her sürümde ~3,8 MB büyüyecek** (installer commit'leniyor) ve
-  geçmiş küçülmez. **KARAR VERİLDİ: olduğu gibi kalacak** (kullanıcı 2026-07-27). Yeniden açma.
-- **Flutter/UI yeniden yazımı — araştırma NET bir cevap verdi, karar hâlâ kullanıcının.**
-  Öneri: **Android için Flutter + `flutter_webrtc` + `flutter_rust_bridge`, Windows Tauri'de
-  kalsın, Rust çekirdeği çerçeveden bağımsız bir crate'e çıkarılsın.** Gerekçe: Android
-  WebView'da `getDisplayMedia()` **yok** (MDN uyumluluk tablosu), ekran paylaşımı MediaProjection
-  ister ve native pikselleri WebView'ın `RTCPeerConnection`'ına bağlamanın standart yolu yok —
-  yani "küçük bir Kotlin eklentisi" aslında ikinci bir WebRTC yığını demek. Arka planda süren
-  aramalar da foreground service ister, WebView bunu vermiyor. Maliyet: TypeScript'in **%0'ı**
-  Flutter'a taşınır (protokol dokümantasyon olarak kalır), Rust mantığının ~%80-90'ı yaşar.
-  Sadece ön planda çalışan bir Android denemesi istenirse Tauri 3-7 günde yapar; ürün parite
-  isteniyorsa Flutter 3-6 hafta. **Karar verilmeden UI'a büyük yatırım yapma.**
-- **TURN kararı: KAPALI, yeniden açma.** Yalnızca kuzenle yapılan gerçek deneme "ifade ekranı
-  geldi ama bağlanmadı" ile sonuçlanırsa gündeme gelir. Kodda yalnızca ayarlanabilir ICE alanı var.
-- **Ses rölesi (Android) sorusu cevaplandı:** ayrı bir röle bileşeni eklenmeyecek; ses zaten
-  WebRTC SRTP'dir, doğrudan bağlantı kurulamazsa cevap TURN'dür. `ARCHITECTURE.md:42`.
-- **Özel imza anahtarları yerelde YOK.** Her yayın CI'dan geçmek zorunda; `npm run tauri build`
-  yerelde imzasız olduğu için başarısız olur, bu beklenen davranıştır.
-
-**Bilinen tuzaklar:**
-
-- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA — sadece Edit kullan.** `Get-Content -Raw` Türkçeyi
-  ANSI okuyup mojibake yapar; `Set-Content -Encoding utf8` JSON'lara BOM yazıp Tauri derlemesini
-  kırar. Kurtarma: `git checkout -- <dosya>` sonra Edit.
-- **Görünmez karakter içeren regex'i Edit ile yazma.** Bu oturumda `safeDisplayName`'in bidi/
-  zero-width sınıfı iki kez bozuldu; çözüm kod noktası karşılaştırmasına geçmek oldu
-  (`src/services/peer-transport.ts`, `safeDisplayName`). Test dosyasında `​` gibi kaçışlar
-  güvenli, ama Bash heredoc'a ham kontrol karakteri koyma — araç reddediyor.
-- **Codex CLI bu makinede dosya YAZAMIYOR.** `--full-auto` deprecated ve arka planda stdin'de
-  asılıyor (`< /dev/null` şart); `--sandbox workspace-write` ile çalışsa bile `apply_patch`
-  Windows PowerShell tırnaklaması yüzünden "Invalid patch: The last line of the patch must be
-  '*** End Patch'" verip düşüyor. Bu oturumda worker test lane'i 2 testlik taslakta takıldı,
-  paket elle tamamlandı. **Mekanik düzenlemeleri doğrudan Edit ile yap.**
-- **Mojibake tekrar etmeye meyilli.** Türkçe string içeren bir dosyayı düzenleyen her araçtan
-  sonra `grep -n 'Ã\|Å\|Ä' <dosya>` çalıştır; çıktı boş olmalı.
-- Git bu repoda LF→CRLF uyarısı basıyor; normal, düzeltmeye çalışma.
+**Çalışma kuralları ve tuzaklar `ROADMAP.md`'nin sonundadır** — Codex'in bu makinede mevcut
+dosyayı düzenleyemediği (ama yeni dosya oluşturabildiği), PowerShell'in Türkçeyi bozduğu ve
+model seçimi (`sol` yalnız araştırma, mekanik lane'ler `terra`) orada yazılı. Oraya bak.
