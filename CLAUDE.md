@@ -127,10 +127,12 @@ Commit'ten sonra **push etme**, kullanıcıya sor.
 - **Flutter/UI yeniden yazımı gündemde.** Kullanıcı Tauri'nin Windows dışında sorun
   çıkaracağından endişeli; "çekirdek Rust kalsın, UI Flutter olsun" fikrini attı, acelesi yok.
   Bu Faz 6'nın (`ARCHITECTURE.md:41`) asıl karar noktası. Karar verilmeden UI'a büyük yatırım yapma.
-- **TURN kararı: kendi sunucumuzu KURMUYORUZ.** Kullanıcı önce "kuralım" dedi, sonra vazgeçti
-  (hız ve uğraş gerekçesiyle). Cloudflare Realtime TURN de reddedildi (0,05 USD/GB, SFU'suz ücretli).
-  Bu yüzden kod tarafında yalnızca **ayarlanabilir alan** var, sunucu yok. **Bunu yeniden açma;**
-  ancak kuzenle yapılan gerçek deneme "ifade ekranı geldi ama bağlanmadı" ile sonuçlanırsa gündeme gelir.
+- **TURN kararı: KAPANDI, yeniden açma.** Kullanıcı hem Cloudflare Realtime TURN'ü (0,05 USD/GB)
+  hem kendi sunucusunu reddetti ("siktir et turnu"). Kod tarafında yalnızca **ayarlanabilir ICE
+  alanı** var, sunucu yok, koda gömülü sağlayıcı yok. Bu konuyu **sadece** kuzenle yapılan gerçek
+  deneme "ifade ekranı geldi ama bağlanmadı" ile sonuçlanırsa gündeme getir; başka hiçbir durumda açma.
+  (Araştırma yapıldı: Netcup Nürnberg ~2,60 €/ay + coturn 4.15 Docker + REST/HMAC kimlik önerisi
+  çıktı. Rapor oturum scratchpad'indeydi, kalıcı değil.)
 
 **Bilinen tuzaklar:**
 
