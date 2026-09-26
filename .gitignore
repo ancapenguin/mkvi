@@ -33,3 +33,36 @@ cloudflare/wrangler-login.*
 tauri.conf.local.json
 .secrets/
 .release-assets/
+
+# --- Flutter / Dart -----------------------------------------------------------
+# pubspec.lock IS tracked on purpose: an application must ship reproducible
+# dependency versions. (A library package would ignore it; MKVI is an app.)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+*.iml
+
+# --- Week 0 spike (go/no-go probe) -------------------------------------------
+# The spike source is tracked: it is the evidence for the Flutter decision and
+# the regression probe for flutter_webrtc on Windows. Only its output is not.
+spike/build/
+spike/.dart_tool/
+spike/windows/flutter/ephemeral/
+spike/.flutter-plugins
+spike/.flutter-plugins-dependencies
+
+# --- Avenox second brain -----------------------------------------------------
+# The brain is the lead engineer's local memory. It must never reach a public
+# repository, so its managed files stay untracked. Durable decisions that belong
+# in public history live in docs/adr/ instead.
+.beyin-version
+.beyin-runtime.json
+.beyin-state/
+AGENTS.md
+.agents/
+daily/
+notes/
+knowledge/
+Beyni Guncelle.cmd
+Beyni Guncelle.desktop

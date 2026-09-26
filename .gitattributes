@@ -1,0 +1,48 @@
+# Tek satir sonu kurali: depo icinde LF, calisma agacinda da LF.
+# Windows'ta gelistirip Linux CI'da derledigimiz icin satirlarin agirligi degismemeli;
+# "LF will be replaced by CRLF" uyarisi her komutta diff gurultusu yaratiyordu.
+* text=auto eol=lf
+
+# Rust
+*.rs text eol=lf
+*.toml text eol=lf
+Cargo.lock text eol=lf
+
+# Dart / Flutter
+*.dart text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# TypeScript / Web
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# Markdown: satir sonu degistirme, diff okunur kalsin
+*.md text eol=lf
+
+# Windows betikleri ve C++ kaynaklari CRLF ister
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.rc text eol=crlf
+*.cpp text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.c text eol=lf
+
+# Ikili dosyalar asla metin sanilmasin
+*.exe binary
+*.dll binary
+*.so binary
+*.a binary
+*.lib binary
+*.pdb binary
+*.zip binary
+*.png binary
+*.ico binary
+*.sig binary
+*.sqlite3 binary
