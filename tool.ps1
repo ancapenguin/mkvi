@@ -25,7 +25,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('gate', 'gate-quick', 'spike', 'version', 'clean', 'help')]
+    [ValidateSet('gate', 'gate-quick', 'spike', 'version', 'clean', 'resources', 'help')]
     [string]$Task = 'gate'
 )
 
@@ -142,6 +142,56 @@ function Test-Encoding {
     } else { Add-Result 'Kodlama: ham NUL bayti' 'GECTI' }
 }
 
+function Test-Resources {
+    <#
+        Derleme kapiyi calistirmadan once kaynaklari olcer. Bu proje ayni anda birden
+        fazla agir is yurutebilir (cargo + flutter + vitest + ajanlar). 32 GB RAM'li
+        bir makinede hepsi ayni anda kostugunda swap veya OOM kapıyı yanlis yere
+        kirmizi yapar; yani "kaynak yetersiz" ile "kod bozuk" birbirine karisir.
+        O yuzden once olcer, sonra uyarir.
+    #>
+    Write-Step 'Sistem kaynaklari'
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    $cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $os -or -not $cpu) { Add-Result 'Sistem kaynaklari' 'ATLANDI' '(WMI okunamadi)'; return }
+
+    $totalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+    $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    $freePct = if ($totalGB -gt 0) { [math]::Round($freeGB / $totalGB * 100) } else { 0 }
+    $load = [math]::Round(($cpu | Measure-Object -Property LoadPercentage -Average).Average)
+    $cores = $cpu.NumberOfLogicalProcessors
+    $diskFree = [math]::Round((Get-PSDrive C).Free / 1GB, 1)
+
+    Write-Host "   RAM $freeGB / $totalGB GB bos ($freePct%) · CPU yukü $load% ($cores cekirdek) · C: $diskFree GB bos" -ForegroundColor DarkGray
+
+    # En yogun uc surec: derleme sirasinda neyin kaynak yedigini gormek icin.
+    Get-Process -ErrorAction SilentlyContinue |
+        Sort-Object WorkingSet64 -Descending |
+        Select-Object -First 3 |
+        ForEach-Object { Write-Host ("   {0,-18} {1,6} MB" -f $_.ProcessName, [math]::Round($_.WorkingSet64 / 1MB)) -ForegroundColor DarkGray }
+
+    $problems = @()
+    if ($freeGB -lt 4) { $problems += "RAM yetersiz ($freeGB GB)" }
+    if ($freePct -lt 15) { $problems += "RAM dolu ($freePct%)" }
+    if ($load -ge 90) { $problems += "CPU yukü $load%" }
+    if ($diskFree -lt 10) { $problems += "disk az ($diskFree GB)" }
+
+    if ($problems.Count -gt 0) {
+        Write-Host ''
+        Write-Host "   ! KAYNAK UYARISI: $($problems -join '; ')" -ForegroundColor Yellow
+        Write-Host '   ! Bu bir KOD hatasi degil. Asagidaki KALDI satirlari kaynak yetersizliginden' -ForegroundColor Yellow
+        Write-Host '   ! kaynaklanmis olabilir. Once arka plandaki derlemeleri bitir, sonra tekrar calistir.' -ForegroundColor Yellow
+        if ($env:MKVI_STRICT_RESOURCES -eq '1') {
+            Add-Result 'Sistem kaynaklari' 'KALDI' ($problems -join '; ')
+            return $false
+        }
+        Add-Result 'Sistem kaynaklari' 'GECTI' ("UYARI: " + ($problems -join '; '))
+        return $true
+    }
+    Add-Result 'Sistem kaynaklari' 'GECTI' ("RAM $freeGB GB · CPU $load%")
+    return $true
+}
+
 function Show-Summary {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkGray
@@ -189,6 +239,10 @@ switch ($Task) {
         Write-Host 'MKVI KAPI - butun dogrulamalar' -ForegroundColor White
         Write-Host ("Surum: " + (Get-Content (Join-Path $root 'VERSION') -Raw).Trim()) -ForegroundColor DarkGray
 
+        # Kaynak olcumu once yapilir: yetersiz RAM/CPU altinda bir derlemenin
+        # kirmizi cikmasi kod hatasi degildir ve yanlis teşhis edilir.
+        if (-not (Test-Resources)) { Show-Summary; break }
+
         # 1) Web / TypeScript (donmus Tauri hatti)
         Invoke-Check -Name 'tsc --noEmit' -WorkDir '.' -Command @('npx', 'tsc', '--noEmit')
         Invoke-Check -Name 'vitest (root, worker dahil)' -WorkDir '.' -Command @('npx', 'vitest', 'run')
@@ -222,8 +276,15 @@ switch ($Task) {
         break
     }
 
+    'resources' {
+        if (-not (Test-Resources)) { Show-Summary; break }
+        Show-Summary
+        break
+    }
+
     'spike' {
         if (-not (Test-Exists 'spike')) { Write-Host 'spike/ klasoru yok.' -ForegroundColor Red; exit 1 }
+        if (-not (Test-Resources)) { Show-Summary; break }
         Invoke-Check -Name 'spike derlemesi (release)' -WorkDir 'spike' -Command @('flutter', 'build', 'windows', '--release')
         Show-Summary
         break
