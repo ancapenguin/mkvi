@@ -102,6 +102,8 @@ için dosya/satır düzeyinde kök neden analizi.
       Android'de anahtar platform kasasında (`flutter_secure_storage`).
 - [x] **Kendi adını kullanıcı belirler**, `profile` mesajıyla karşıya gider. Takma ad
       yalnız yerelde kalır ve asla gerçek adın yerini almaz.
+- [x] **libp2p reddedilmedi; superapp'in kapsamı reddedildi.** Bu madde bir ağ
+      teknolojisi seçimi değil, kapsam sınırıdır. Bkz. aşağıdaki "Kapsam disiplini".
 
 ---
 
@@ -273,6 +275,26 @@ kombinasyonlarında bozulmadan.
 - [ ] Ekran paylaşımı **MediaProjection** ister; `getDisplayMedia` Android WebView
       eşdeğeri değildir.
 - [ ] Kamera/mikrofon izin akışı ve kalıcı izin iptali.
+
+---
+
+## Kapsam disiplini
+
+Bu projenin **önceki denemesi `superapp` idi ve çok büyük olduğu için öldü**
+(mesajlaşma + dosya + hız testi + arama + ekran paylaşımı, libp2p tabanlı, 7 Rust
+crate). MKVI onun bilinçli olarak küçültülmüş hâli. `oxide` de aynı işin rename'i
+olacaktı, yarıda ayrı bir klasör olarak kalmış — ikisi de ölü deneme, arşivlenebilir.
+
+Yani **bilinen başarısızlık biçimi kapsamdır.** Şu kural bu yüzden yazıldı:
+
+1. **Küçük sürüm önce tam çalışır, sonra büyür.** Windows'ta iki cihazda gerçek arama
+   + dosya aktarımı geçmeden hiçbir platform eklenmez.
+2. **Yeni bir ekran/özellik eklemek, listeden bir şey çıkarmayı gerektirir.** İstisna
+   kayda geçirilir.
+3. **Hedef cümlesi platform saymaz.** Aşağıdaki "Bitti" tanımı tek platform içindir;
+   macOS/Linux/Android **sonraki** sürümlerin işidir, ilk sürümün değil.
+4. `oxide` zaten Flutter istemci planlıyordu; Flutter kararı en az iki denemedir denenmiş
+   bir karardır. Bkz. `docs/adr/0001`.
 
 ---
 
