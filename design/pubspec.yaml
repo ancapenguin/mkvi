@@ -1,0 +1,13 @@
+name: mkvi_design
+description: >-
+  Design token source of truth for the mkvi desktop app. Pure Dart package: it
+  contains no Flutter dependency on purpose, so `dart test` can gate the token
+  contract without a Flutter toolchain.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.6.0
+
+dev_dependencies:
+  test: ^1.25.0

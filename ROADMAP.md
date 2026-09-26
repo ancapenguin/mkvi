@@ -120,10 +120,21 @@ için dosya/satır düzeyinde kök neden analizi.
 
 ## Faz 2 — Tasarım sistemi ve kabuk
 
-- [ ] **`design/tokens.json`** → generator → `app/lib/ui`. 4 tema × 4 vurgu, tam rol
-      listesi, odak halkası vurgudan ayrık.
-- [ ] **Kontrast testi kapıda.** Her (tema, vurgu) çifti WCAG'ı geçmeli; 17 ihlal
-      geri gelemez.
+- [x] **`design/tokens.json`** → generator → `tokens.g.dart`. 4 tema × 4 vurgu, 29 rol,
+      816 ölçülmüş kontrast oranı, 17 test. Ölçülen en kötü oranlar:
+      video placeholder 1.17:1 → **17.11:1**, odak halkası 1.00:1 → **3.28:1**,
+      ayırıcı 1.6–2.3:1 → **3.59:1**, ilerleme izi 1.24:1 → **3.59:1**,
+      zaman damgası 4.47:1 → **4.99:1**, devre dışı metin 3.20:1 → **4.87:1**.
+- [x] **Kapı kırılabilir olduğu kanıtlandı:** iki negatif kontrol yapıldı — odak
+      halkası vurguya eşitlenince ve sahne rengi açık yapılınca test kırmızıya
+      düştü. Hata mesajı hangi tarihsel kusuru geri getirdiğini adıyla söylüyor.
+- [ ] **Vurgu dolu düğme, yükseltilmiş yüzeyde `borderStrong` kenarı alacak.**
+      Bu bir token kuralı değil, arayüz kuralı: token testi bunu ölçemez,
+      vurgu dolu her düğme `bg`/`surface` üzerinde durmalı, `surfaceRaised`/
+      `surfaceSoft` üzerinde ise kenarı olmalı. Kod yazarken uygulanacak.
+- [ ] **Sahne kutuplaşması testle korunuyor** (`stage` koyu, `textOnStage` açık,
+      her temada) — 0.1.x'teki 1.17:1 sınıfının yapısal olarak geri dönmesini
+      engelleyen şey bu.
 - [ ] **Ölçek/yoğunluk her yerde** (0.1.x'te `fontScale` ilk ekranlarda etkisizdi).
 - [ ] **Üç ekran:** eşleştirme, çalışma alanı, arama.
 
