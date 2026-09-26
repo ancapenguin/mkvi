@@ -1,54 +1,91 @@
-# MKVI mimari kararı ve yol haritası
+# MKVI mimarisi
+
+Bu dosya **yol haritası değildir** — plan `ROADMAP.md`'dedir, kararlar `docs/adr/`'dededir.
+Burada yalnızca sistem nasıl kuruluyor ve hangi sınır neden var.
 
 ## Karar
 
-İlk ürün **Tauri 2 + React + TypeScript + Rust** ile geliştirilecek. Arayüz sistem WebView'inde çalışır; Windows'ta bu WebView2'dir. Gerçek zamanlı medya ve dosya aktarımı tarayıcının olgun WebRTC uygulamasını (`RTCPeerConnection`, `MediaDevices`, `RTCDataChannel`) kullanır. Rust, yerel sırlar, şifreli kalıcı veri ve işletim sistemi izinleri için küçük bir güvenlik sınırı olur.
+Uygulama **Flutter** ile yazılıyor; taşıma `flutter_webrtc` üzerinden platform-native
+WebRTC'dir (Windows'ta MF/WASAPI/DXGI). Rust çekirdek korunur ve Tauri'den tamamen
+ayrılmıştır. Kararın gerekçesi, kanıtı ve riskleri: `docs/adr/0001-flutter-migration.md`.
 
-Bu seçim Windows v1'ini hızlı ve küçük bir paketle teslim etmeye yöneliktir. Tauri 2 Android/iOS hedeflerini destekler; ortak TypeScript iletişim protokolü ve Rust çekirdeği korunacaktır. Android ekran paylaşımı gerekirse MediaProjection kullanan bir Kotlin Tauri eklentisi eklenir.
+Sinyalleşme sunucusu değişmedi: `cloudflare/` içindeki Worker iki Durable Object'tir ve
+MKVI'nin sadece eşler arasında konuşma yolunu taşır.
 
-Flutter bu aşamada seçilmedi: mobil taşıma avantajı güçlü olsa da mevcut Windows teslimini geciktirir ve WebRTC yüzeyinde ek bir eklenti katmanı getirir. Android için erken bir uyumluluk denemesi bu kararı doğrulayacaktır.
+## Katmanlar
+
+```text
+app/                        Flutter uygulaması
+  lib/core/protocol/          tel protokolü: kontrol mesajları, dosya çerçevesi, temizleyiciler
+  lib/signaling/              rendezvous istemcisi, payload beyaz listesi, eşleştirme kodu
+  lib/session/                kurulum durumu, geri bağlanma döngüsü, isimler
+  lib/call/                   çağrı durum makinesi (WebRTC'siz, donanımsız test edilebilir)
+  lib/chat/                   mesaj zaman çizelgesi, dosya aktarımı koordinasyonu
+  lib/media/                  üç transceiver, replaceTrack, cihaz hatalarının Türkçeleştirilmesi
+  lib/settings/               görünüm ve bağlantı ayarları
+  lib/update/                 güncelleme: feed oku, indir, doğrula, kur
+crates/mkvi_core/            Tauri bilmez: Ed25519, keyring, şifreli SQLite, dosya yazımı
+crates/mkvi_bridge/          flutter_rust_bridge yüzeyi — Dart'ın Rust'a giden tek kapısı
+cloudflare/                  sinyal sunucusu (AGPL-3.0, dokunulmaz)
+design/                      tasarımın tek kaynağı: tokens.json + kontrast testi
+vectors/                     TypeScript ve Dart'ın ortak sözleşmesi (wire-v1.json)
+spike/                       Hafta 0 go/no-go probu — yalnız README.md
+```
+
+**Katman kuralı:** Dart, Rust'a yalnızca `mkvi_bridge` üzerinden dokunur. `mkvi_core`
+Flutter'ı ve Tauri'yi bilmez. `cloudflare/` hiçbir şeyi bilmez.
+
+`src/`, `src-tauri/` ve kökteki `package.json`/`vite.config.ts` 0.1.x **donmuş** Tauri
+hattıdır. Dart portunun spesifikasyon kaynağıdır; Flutter 0.2.0 yayınlandıktan sonra
+tek commit'te silinir.
 
 ## Güvenlik sınırları
 
 ```text
-MKVI cihaz A  -- DTLS/SRTP ve DataChannel -->  MKVI cihaz B
-     |                                                    |
-     +------ WSS: yalnızca offer/answer/ICE -------------+
-                         Cloudflare Worker + Durable Object
+MKVI cihaz A  -- DTLS/SRTP + DataChannel -->  MKVI cihaz B
+     |                                                  |
+     +------ WSS: yalnızca identity / offer / answer / ICE ---+
+                       Cloudflare Worker + Durable Object
 ```
 
-- Worker; kısa kodla açılan geçici oturum, online durum ve signaling zarfını yönetir. Mesaj, dosya veya medya içeriğini kaydetmez ya da aktarmaya çalışmaz.
-- Pairing kodu tek kullanımlık, kısa ömürlüdür. Her iki taraf aynı SAS (short authentication string) ifadesini görüp onaylamadan kalıcı eş kabul edilmez.
-- Cihaz için Ed25519 anahtar çifti üretilecek; özel anahtar Windows DPAPI / macOS Keychain / Android Keystore üzerinden saklanacaktır. Özel kripto algoritması yazılmayacaktır.
-- Yerel geçmiş normal SQLite içinde uygulama katmanında XChaCha20-Poly1305 ile şifrelenir; şifreleme anahtarı işletim sistemi güvenli deposunda tutulur.
-- Tauri capability listesi en az yetkiyle tutulur. Frontend hiçbir zaman ham anahtar veya veritabanı parolası görmez.
+- **Sunucu içerik taşımaz.** `isSignalPayload` anahtar bazında beyaz listedir; içerik
+  alanı eklemek Worker'ı içerik tüneline çevirir. Protokolü daraltmak kırıcıdır: alanı
+  çıkarmak, o alanı hâlâ gönderen eski istemcileri düşürür.
+- **Cihaz kimliği Ed25519**; özel anahtar işletim sistemi kasasında (Windows DPAPI,
+  macOS Keychain). **Özel kripto yazılmaz** — yalnız denetimli crate'ler.
+- **Sessiz sır üretimi yasaktır.** Keyring'de kayıt yoksa ama diskte bir şey varsa
+  yeni anahtar üretilmez; `KeyringEntryMissing` hatası verilir. Yazma sonrası okuma
+  doğrulanır, çünkü `keyring` 3 arka ucsuz kaldığında bellek içi mock'a düşüyor.
+  Android'de `keyring` **yoktur**; Android'de platform kasasından beslenen bir
+  `SecretStore` uygulaması gerekir.
+- **Yerel geçmiş** XChaCha20-Poly1305 ile şifrelenir; anahtar kasada durur. Satır
+  sırası ve zaman damgaları düz metindir (SQLCipher Faz 4'e bırakıldı).
+- **Dart ham anahtarı asla görmez**; imzalama ve çözme çekirdektedir.
+- **Bilinen açık (kapatılıyor):** SAS ifadesi şu an yalnız eşleştirme kodu + anahtarların
+  özetidir. Sinyal sunucusunu kontrol eden biri iki tarafa da aynı ifadeyi gösterebilir.
+  DTLS parmak izi eklenerek kapatılacak (`ROADMAP.md` Faz 4).
+- **Bilinen açık (kapatıldı):** yayın anahtarı minisign'in eski `Ed` biçiminde;
+  katı doğrulayıcı her imzayı reddederdi. Artık bu durum `LegacyKey` hatası olarak
+  **adıyla** bildiriliyor; kök çözüm ilk Flutter sürümünden önce prehashed anahtar
+  üretmek.
 
-## Uygulama katmanları
+## Neden bu ayrımlar
 
-- `src/domain`: platformdan bağımsız pairing ve signaling tipleri.
-- `src/services`: WebSocket signaling ve ileride WebRTC oturumu.
-- `src/components`: Türkçe kullanıcı arayüzü.
-- `src-tauri`: yalnızca güvenilir yerel komutlar / anahtar deposu / şifreli geçmiş.
-- `cloudflare`: ayrı dağıtılan, yalnızca rendezvous Worker'ı.
-
-## Yol haritası
-
-1. **Temel (bu değişiklik):** Tauri kabuğu, Türkçe pairing ekranı, tipli signaling protokolü, TTL'li Durable Object Worker ve derleme doğrulaması.
-2. **Eşleştirme:** OS güvenli depoda cihaz anahtarı, imzalı ephemeral anahtar değişimi ve SAS onayı; eş kaydının şifreli yerel depoya yazılması.
-3. **P2P mesajlaşma:** WebRTC DataChannel, sıralı mesajlar, şifreli SQLite geçmişi ve yeniden bağlanma.
-4. **Dosya:** parça-kimlikleri, akış geri basıncı, bütünlük kontrolü ve devam ettirme metadatası.
-5. **Arama:** ses, görüntü, cihaz seçimi, bağlantı istatistikleri ve ekran paylaşımı.
-6. **Kullanım kalitesi (devam ediyor):** dosya aktarım ilerleme çubuğu, WebView otomatik-tamamlama kapatma, mikrofonsuz cihazda aramanın çökmemesi, kendi kullanıcı adını belirleme (`profile` kontrol mesajı), yeniden bağlanmanın kod istemeden çalışması.
-7. **Kimlik görünümü:** profil fotoğrafı. Karar bekliyor — fotoğraf DataChannel üzerinden küçük bir kare (≤64 KB, yeniden boyutlanmış) olarak gönderilir ve yerelde şifreli SQLite'ta saklanır; sunucuya hiçbir şey gitmez. Bu, `profile` mesajının doğal devamı.
-8. **Android denemesi:** pairing, DataChannel, kamera/mikrofon izni; gerekirse ekran paylaşımı eklentisi. Başarısızlıkta Flutter'a geçiş kararı burada yeniden ele alınır.
-   - **Ses rölesi sorusu:** Android tarafına ayrı bir "audio relay" bileşeni eklenmeyecek. Ses zaten WebRTC'nin SRTP akışıdır; doğrudan bağlantı kurulamazsa çözüm TURN'dür, uygulamaya gömülü bir röle değil. TURN kararı kullanıcıya ait ve şu an kapalı; ayar alanı `src/domain/ice.ts` içinde hazır duruyor.
-9. **Sertleştirme:** bağımsız güvenlik incelemesi, rate-limit testleri, paket imzalama ve yedekleme olmayan geri yükleme stratejisi.
+| Sınır | Kötüye kullanıldığında |
+|---|---|
+| Worker beyaz listesi | Sunucu içerik taşıyıcısına dönüşür |
+| Anahtar kasada | Cihaz çalınırsa geçmiş okunur |
+| Doğrulama Rust'ta | Kötüye güncellenmiş bir build imza kontrolünden geçer |
+| Tasarım kontrast testi | Okunmayan arayüz geri gelir (0.1.x'te 17 ihlal vardı) |
+| `vectors/wire-v1.json` | İki uygulama sessizce ayrışır (0.1.x'te base64 ve UUID hatası böyle çıktı) |
 
 ## Çalıştırma
 
 ```powershell
-npm run build
-npm run tauri dev
+.\tool.ps1 gate      # tüm doğrulamalar: tsc, vitest, cargo, wrangler, flutter, kontrast, kodlama
+.\tool.ps1 resources # sadece kaynak ölçümü (ağır derlemeden önce)
 ```
 
-Worker için `cloudflare` klasöründe `npm install`, ardından `npx wrangler login` ve `npx wrangler deploy` çalıştırılır. Dağıtım URL'si MKVI'nin Ayarlar ekranına yazılır.
+Uygulama: `cd app; flutter run -d windows`. Worker: `cd cloudflare; npm install;
+npx wrangler deploy` — dağıtılan adresi uygulamanın ayarlarına yazarsın; MKVI hiçbir
+sunucuyu gömmez.
