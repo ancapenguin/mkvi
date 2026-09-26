@@ -1,0 +1,44 @@
+[package]
+name = "mkvi_core"
+version = "0.1.4"
+description = "MKVI çekirdeği: güvenlik, dosya alımı ve güncelleme doğrulaması"
+authors = ["MKVI"]
+edition = "2021"
+
+# Deliberately its own package, not a workspace member: the core has to stay
+# buildable on its own so the Flutter shell can call it through
+# flutter_rust_bridge without dragging Tauri in.
+[lib]
+name = "mkvi_core"
+crate-type = ["rlib"]
+
+[dependencies]
+base64 = "0.22"
+chacha20poly1305 = "0.10"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+# Pure minisign signature verification for the future self-updater. No network,
+# no async: the download stays the host's job.
+minisign-verify = "0.3"
+rand_core = { version = "0.6", features = ["getrandom"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Wipes the decoded device seed and database key off the stack once used.
+zeroize = "1"
+
+# keyring 3 ships NO default features, and with none enabled it silently falls back
+# to an in-memory mock store. That made every launch mint a fresh device identity and
+# a fresh database key, so the saved peer could never be read back and the app asked
+# for a pairing code again. The backend must be selected per platform, explicitly.
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["sync-secret-service", "crypto-rust"] }
+
+[dev-dependencies]
+tempfile = "3"

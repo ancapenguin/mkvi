@@ -166,9 +166,18 @@ kombinasyonlarında bozulmadan.
 
 ## Faz 7 — Güncelleme, dağıtım, açık kaynak
 
+- [ ] **Yayın anahtarı yeniden üretilmeli (prehashed).** Doğrulandı: `tauri.conf.json`
+      içindeki anahtar minisign'in **eski `Ed`** biçiminde. Katı doğrulayıcı her
+      `ED` imzasını kabul eder, ama bu anahtar yalnız `Ed` imzası üretebilir — yani
+      doğrulama sessizce her şeyi reddederdi. `mkvi_core::update` artık bunu
+      `LegacyKey` hatası olarak **adıyla** söyler (testli), ama kök çözüm yeni bir
+      `tauri signer generate` ile prehashed anahtar + `TAURI_SIGNING_PRIVATE_KEY`
+      secret'ının yenilenmesidir.
+      **Sonuç:** 0.1.x istemcileri kendini güncelleyemez (zaten ölü feed yüzünden
+      edemiyorlardı) — ilk Flutter sürümü elle kurulur.
 - [ ] **`mkvi_core::update`:** `latest.json` oku → sürüm karşılaştır → indir →
       **imzayı doğrula** → kur. Doğrulama indirilen baytın **tamamı** üzerinde,
-      bayt bayt kontrolsüz geçilemez.
+      bayt bayt kontrolsüz geçilemez. *(Çekirdek kısmı yazıldı: 24 test.)*
 - [ ] **`release.yml`:** etiketle tetiklenir, taslak yayın, sürüm üç dosyada eşleşmeli.
 - [ ] **Feed GitHub Releases'e taşınır** → `mkvi-updates` deposu ve deploy anahtarı
       emekli. `ancapenguin/mkvi` **public** olunca updater endpoint'i
