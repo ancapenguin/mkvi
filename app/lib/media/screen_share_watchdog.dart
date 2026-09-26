@@ -9,17 +9,13 @@ import 'media_state.dart';
 ///
 /// ## Why this file exists at all
 ///
-/// The camera and screen share in the Tauri build never worked. Most of that was
-/// a Tauri/Wry bug — no WebView2 permission handler, and the permission bubble
-/// disabled — which a Flutter desktop build does not have, because
-/// `flutter_webrtc` is a native C++ plugin talking to MF, WASAPI and DXGI
-/// directly.
-///
-/// One defect survives the port, and nothing in the plugin will tell us about it.
-/// **Upstream issue #2137**: `getDisplayMedia` resolves *successfully* with a
-/// track that never produces a frame when the shared window is not foreground.
-/// The root cause is in the plugin's own source — the desktop capturer's `Start()`
-/// return value is discarded and success is reported regardless:
+/// Screen share that silently never produces a frame is indistinguishable, from
+/// the user's side, from screen share that works. Nothing in the plugin will tell
+/// us about it: **upstream issue #2137** — `getDisplayMedia` resolves
+/// *successfully* with a track that never produces a frame when the shared
+/// window is not foreground. The root cause is in the plugin's own source — the
+/// desktop capturer's `Start()` return value is discarded and success is reported
+/// regardless:
 ///
 /// ```cpp
 /// desktop_capturer->Start(uint32_t(fps));

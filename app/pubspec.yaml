@@ -13,8 +13,21 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Yerel tasarımın tek kaynağı design/tokens.json'dan üretilir.
+  # Tasarımın tek kaynağı design/tokens.json; derlenmiş biçimi bu paket.
   # tokens.g.dart üretilmiş bir dosyadır; elle düzenlenmez.
+  mkvi_design:
+    path: ../design
+
+  # Rust çekirdeğe tek yol. Üretilmiş bağlantı crates/mkvi_bridge/dart altında.
+  mkvi_bridge:
+    path: ../crates/mkvi_bridge/dart
+
+  # Yalnız `ExternalLibrary` tipini adlandırabilmek için. Köprünün kendi
+  # pubspec'inde "=2.13.0" olarak sabit; burada da aynı sürüm, çünkü Dart iki
+  # paketin aynı çalışma zamanı sürümünü paylaşmasını zorunlu kılıyor. Kullanım
+  # tek satır: RustLib.init'e önceden açılmış kütüphane vermek.
+  flutter_rust_bridge: 2.13.0
+
   cupertino_icons: ^1.0.8
 
   # P2P taşıma. 1.6.2+hotfix.3, webrtc_interface 1.5.1 ile gelir.

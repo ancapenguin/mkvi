@@ -1,17 +1,17 @@
-/// Text sanitisers, ported one-for-one from `src/services/peer-transport.ts`.
+/// Text sanitisers for everything the peer channel carries as text.
 ///
 /// Every function here is pure, allocation-only and has no dependency on the
 /// transport, which is what makes the whole protocol layer testable without a
 /// data channel, a renderer or a disk.
 ///
-/// ## Two deliberate deviations from the TypeScript original
+/// ## Two deliberate deviations from a naive length cap
 ///
-/// 1. **Truncation is by code point, not by UTF-16 code unit.** The original
-///    ends with `.slice(0, 40)`, which cuts JavaScript strings at UTF-16 code
-///    unit boundaries and can therefore split a surrogate pair (a broken
-///    emoji) in half. Dart strings are also UTF-16, but `String.runes` iterates
-///    by code point, and every cut here is made on runes. For ASCII — which is
-///    all the ported test-suite asserts — the two are byte-identical.
+/// 1. **Truncation is by code point, not by UTF-16 code unit.** A length cap
+///    applied to JavaScript or Dart strings directly cuts at UTF-16 code unit
+///    boundaries and can therefore split a surrogate pair — a broken emoji — in
+///    half. Dart strings are UTF-16 too, but `String.runes` iterates by code
+///    point, and every cut here is made on runes. For ASCII the two are
+///    byte-identical, so no ASCII contract changes.
 /// 2. **A display name is cut on a grapheme-cluster boundary.** Rune truncation
 ///    alone would still leave `"I"` + U+0307 (Turkish dotted capital I) or an
 ///    emoji ZWJ sequence dangling at the cap, which renders as a broken glyph.
@@ -32,12 +32,11 @@ int utf8ByteLength(String value) => utf8.encode(value).length;
 
 /// Strips control characters, zero-width/bidi marks and the BOM from a name that
 /// a peer chose for itself, collapses whitespace, and caps the result.
-///
-/// TS: `safeDisplayName`.
 String safeDisplayName(String value) {
-  // `map(invisible -> " ")` followed by `/\s+/ -> " "` of the TypeScript
-  // original, fused into one pass: both steps only ever turn a run of
-  // invisible-or-space characters into a single space.
+  // Both halves of this pass — replacing each invisible character with a space,
+  // then collapsing every run of spaces into one — only ever turn a run of
+  // invisible-or-space characters into a single space, so they are fused into
+  // one pass rather than run twice over the string.
   final StringBuffer out = StringBuffer();
   bool pendingSpace = false;
   for (final int rune in value.runes) {
@@ -63,8 +62,9 @@ String safeDisplayName(String value) {
 /// Reduces a peer-supplied file name to something that cannot escape a download
 /// directory, falling back to a Turkish placeholder when nothing is left.
 ///
-/// TS: `safeName`. Note that the TypeScript character class omits U+007F, so this
-/// port does not strip DEL either; the cap is also by code point here.
+/// Every unsafe rune becomes `_` rather than being dropped, so a name cannot be
+/// silently mangled into a different one. Note that the unsafe set deliberately
+/// omits U+007F (DEL); the cap is by code point, as everywhere in this file.
 String safeName(String value) {
   final StringBuffer out = StringBuffer();
   for (final int rune in value.runes) {
@@ -78,10 +78,11 @@ String safeName(String value) {
 
 /// Keeps a conventional media type, otherwise declares opaque bytes.
 ///
-/// TS: `safeMime`, whose regular expression is
-/// `/^[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*\/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]*$/`.
-/// The original validates the whole string first and only then slices to 128
-/// characters, and that order is preserved here.
+/// The accepted shape is `type/subtype` where each half starts with an
+/// alphanumeric and may then contain `!#$&^_.+-`. The whole string is validated
+/// **before** the 128 character cap is applied, and that order is preserved:
+/// capping first would let a name that is only a valid media type because of its
+/// first 128 characters through.
 String safeMime(String value) {
   if (!_isMediaType(value)) return PeerProtocol.defaultMimeType;
   return _truncateRunes(value, PeerProtocol.maxMimeLength);
@@ -89,10 +90,11 @@ String safeMime(String value) {
 
 /// Flattens the free-text `reason` a peer attaches to a decline or a cancel.
 ///
-/// TS: the private `safeReason`, which 0.1.x reaches through `parseControl` for
-/// `call-decline` and through `declineCall` for outgoing frames. This port also
-/// applies it to `file-decline` and `file-cancel`, which 0.1.x only sliced; see
-/// `control_parser.dart` for why.
+/// Used on *every* reason this protocol carries — `call-decline`, `file-decline`
+/// and `file-cancel` — on both the send and the receive side. A reason is
+/// free text that ends up in a UI, so newlines, tabs and control characters have
+/// to be flattened out of it; `control_parser.dart` says why the receive path
+/// needs this as well as the send path.
 String safeReason(String value) {
   final StringBuffer out = StringBuffer();
   bool pendingSpace = false;
@@ -119,18 +121,18 @@ String safeReason(String value) {
 
 /// Cuts [value] to [limit] code points without ever splitting one.
 ///
-/// Difference from the TypeScript original, which uses `.slice(0, 40)` on a
-/// UTF-16 string: this cannot cut a surrogate pair, and [_truncateOnGrapheme]
-/// additionally cannot cut a combining sequence.
+/// The difference from a plain string slice is that a plain slice cuts at UTF-16
+/// code-unit boundaries and can therefore cut a surrogate pair in half. Dart
+/// strings are UTF-16 too, so this walks code points instead;
+/// [_truncateOnGrapheme] additionally cannot cut a combining sequence.
 String _truncateRunes(String value, int limit) =>
     sliceToCodePoints(value, limit);
 
 /// Cuts [value] to [limit] code points without ever splitting one.
 ///
-/// This is the port of the original's `.slice(0, n)`. Dart strings are UTF-16
-/// like JavaScript strings, but slicing them at a code-unit boundary can cut a
-/// surrogate pair in half, so the port slices code points instead. For ASCII —
-/// which is everything the ported test-suite asserts — the result is identical.
+/// Slicing a UTF-16 string directly can cut a surrogate pair in half, so this
+/// slices code points instead. For ASCII — which is everything the protocol's
+/// vectors and tests assert — the result is identical to a plain slice.
 String sliceToCodePoints(String value, int limit) {
   if (value.length <= limit) return value; // fast path: length == rune count
   return String.fromCharCodes(value.runes.take(limit));
@@ -219,14 +221,13 @@ bool _isRegionalIndicator(int rune) => rune >= 0x1f1e6 && rune <= 0x1f1ff;
 // Character classes
 // ---------------------------------------------------------------------------
 
-/// The TypeScript `invisible` predicate of `safeDisplayName`, plus one addition.
+/// Which runes count as invisible for a display name.
 ///
-/// Unpaired surrogates (U+D800..U+DFFF) are *kept* by the original, because
-/// JavaScript strings can hold them and `JSON.stringify` escapes them. A Dart
-/// string holds them too, but such a string cannot be encoded by strict UTF-8
-/// consumers and renders as tofu, so they collapse to a space here. A *valid*
-/// surrogate pair is reported by `String.runes` as the single code point above
-/// U+FFFF, so emoji are never affected by this.
+/// Unpaired surrogates (U+D800..U+DFFF) collapse to a space here. A Dart string
+/// can hold them, but such a string cannot be encoded by strict UTF-8 consumers
+/// and renders as tofu, so keeping one would put a broken glyph in a peer's name.
+/// A *valid* surrogate pair is reported by `String.runes` as the single code
+/// point above U+FFFF, so emoji are never affected by this.
 bool _isInvisible(int rune) {
   if (rune < 0x20 || rune == 0x7f) return true;
   if (rune >= 0xd800 && rune <= 0xdfff) return true; // unpaired surrogate

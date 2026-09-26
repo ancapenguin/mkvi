@@ -1,10 +1,14 @@
-// A 1:1 port of `src/services/peer-transport.test.ts` (27 tests).
+// The protocol half, exercised through the parser and the sanitisers: 27 tests
+// over control frames, identifiers and text sanitisers.
 //
-// The test names are the English names of the vitest suite, inside the same
-// groups, so the two files can be diffed by eye. Every Turkish string in the
-// expectations is the string the TypeScript source itself raises.
+// These are the only tests this layer has. There is no camera, no socket and no
+// disk anywhere in them, and that is deliberate: the protocol half is the part
+// that must be right on both devices before anything else can work, and it is
+// the part that can be checked with no hardware at all.
 //
-// The trailing comment of each `test` is the line of the original it came from.
+// Every Turkish string in the expectations is a string the protocol itself
+// raises, and several of them are also rendered by the *peer's* UI, so they are
+// a compatibility surface rather than test fixtures.
 
 import 'dart:convert';
 
@@ -16,15 +20,17 @@ import 'package:mkvi/core/protocol/peer_protocol_exception.dart';
 import 'package:mkvi/core/protocol/text_sanitizer.dart';
 import 'package:mkvi/core/protocol/transfer_id.dart';
 
-/// `"a".repeat(32)`, which JavaScript has and Dart does not.
+/// `"a".repeat(32)`: a 32 character id, spelled out the way every fixture needs
+/// it.
 String repeat(String unit, int count) =>
     List<String>.filled(count, unit).join();
 
-/// The JSON the TypeScript tests built with `JSON.stringify(value)`.
+/// Encodes a control frame's JSON.
 String encode(Map<String, Object?> value) => jsonEncode(value);
 
 /// Dart has no built-in UUID generator, so the canonical v4 shape is written out
-/// by hand. Only the dashes matter to the parser.
+/// by hand. Only the dashes matter to the parser: this is the id shape that once
+/// made every message disappear.
 const String uuid = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
 /// The fixture of "strips path separators and control characters":
@@ -44,10 +50,10 @@ final String nameWithControlCharacters = String.fromCharCodes(<int>[
   0x66,
 ]);
 
-/// The matcher the TypeScript suite expressed as `expect(...).toThrow()`.
+/// Every rejected shape raises a [PeerProtocolException].
 final Matcher throwsProtocolException = throwsA(isA<PeerProtocolException>());
 
-/// The matcher the TypeScript suite expressed as `.toThrow(/çok büyük/)`.
+/// The size guard, matched on the Turkish text the peer may also render.
 final Matcher throwsMessageTooLarge = throwsA(
   isA<PeerProtocolException>().having(
     (PeerProtocolException e) => e.message,
@@ -99,7 +105,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:12
     );
 
     test(
@@ -117,7 +122,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/peer-transport.test.ts:22
     );
   });
 
@@ -137,7 +141,6 @@ void main() {
           ChatMessage(id: id, text: 'merhaba', sentAt: 1700000000000),
         );
       },
-      // src/services/peer-transport.test.ts:28
     );
 
     test(
@@ -165,7 +168,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:33
     );
 
     test(
@@ -186,7 +188,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:39
     );
 
     test(
@@ -216,7 +217,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/peer-transport.test.ts:45
     );
 
     test(
@@ -237,7 +237,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/peer-transport.test.ts:51
     );
 
     test(
@@ -255,7 +254,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/peer-transport.test.ts:58
     );
 
     test(
@@ -280,7 +278,6 @@ void main() {
           ),
         );
       },
-      // src/services/peer-transport.test.ts:62
     );
 
     test(
@@ -315,7 +312,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:69
     );
 
     test(
@@ -333,7 +329,6 @@ void main() {
         expect(parsed.kind, ControlMessageType.fileOffer);
         expect((parsed as FileOfferMessage).size, PeerProtocol.maxFileBytes);
       },
-      // src/services/peer-transport.test.ts:75
     );
 
     test(
@@ -353,7 +348,6 @@ void main() {
           expect(parsed.id, id);
         }
       },
-      // src/services/peer-transport.test.ts:80
     );
 
     test(
@@ -372,7 +366,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:86
     );
 
     test(
@@ -392,7 +385,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:92
     );
 
     test(
@@ -415,7 +407,6 @@ void main() {
           'meşgul ${repeat('u', 249)}',
         );
       },
-      // src/services/peer-transport.test.ts:98
     );
 
     test(
@@ -435,7 +426,6 @@ void main() {
         );
         expect((present as PairConfirmedMessage).discovery, discovery);
       },
-      // src/services/peer-transport.test.ts:104
     );
 
     test(
@@ -461,7 +451,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:110
     );
 
     test(
@@ -482,7 +471,6 @@ void main() {
           ),
         );
       },
-      // src/services/peer-transport.test.ts:116
     );
 
     test(
@@ -506,7 +494,6 @@ void main() {
           );
         }
       },
-      // src/services/peer-transport.test.ts:121
     );
 
     test(
@@ -518,7 +505,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/peer-transport.test.ts:127
     );
 
     test(
@@ -531,7 +517,6 @@ void main() {
           throwsMessageTooLarge,
         );
       },
-      // src/services/peer-transport.test.ts:131
     );
   });
 
@@ -542,7 +527,6 @@ void main() {
         expect(safeName('a/b\\c:d*e?f"g<h>i|j'), 'a_b_c_d_e_f_g_h_i_j');
         expect(safeName(nameWithControlCharacters), 'rapor__.pdf');
       },
-      // src/services/peer-transport.test.ts:137
     );
 
     test(
@@ -550,7 +534,6 @@ void main() {
       () {
         expect(safeName('ödev şşğ.txt'), 'ödev şşğ.txt');
       },
-      // src/services/peer-transport.test.ts:142
     );
 
     test(
@@ -561,7 +544,6 @@ void main() {
           hasLength(PeerProtocol.maxFileNameLength),
         );
       },
-      // src/services/peer-transport.test.ts:146
     );
 
     test(
@@ -570,7 +552,6 @@ void main() {
         expect(safeName('   '), 'dosya');
         expect(safeName('/'), '_');
       },
-      // src/services/peer-transport.test.ts:150
     );
   });
 
@@ -586,7 +567,6 @@ void main() {
           expect(safeMime(mime), mime);
         }
       },
-      // src/services/peer-transport.test.ts:157
     );
 
     test(
@@ -603,7 +583,6 @@ void main() {
           expect(safeMime(mime), 'application/octet-stream');
         }
       },
-      // src/services/peer-transport.test.ts:163
     );
   });
 }

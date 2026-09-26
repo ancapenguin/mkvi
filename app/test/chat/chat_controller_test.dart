@@ -1,11 +1,11 @@
 // The send path: the optimistic echo, the in-flight queue, and the reconnect.
 //
-// The defect under every test here is that `App.tsx` had no queue at all. The
-// composer was `disabled={!peerOnline}` and `sendMessage` did
-// `const id = peer.current?.sendChat(body); if (!id) throw new Error(…)`, so a
-// message written during a reconnect could not be composed, and one written in
-// the gap between the field being enabled and the keypress landing was gone.
-// There was no echo, no retry and no record of a failure — only a red notice.
+// The defect under every test here is the absence of a queue. The composer was
+// disabled while the peer was offline, and the send path threw when there was
+// no transport — so a message written during a reconnect could not be composed
+// at all, and one written in the gap between the field being enabled and the
+// keypress landing was gone. There was no echo, no retry and no record of a
+// failure — only a red notice.
 
 import 'dart:async';
 
@@ -446,8 +446,8 @@ void main() {
     test(
       'a storage failure is reported, not thrown, and the line stays',
       () async {
-        // TS: `.catch(() => setNotice("Mesaj yerelde saklanamadı."))` — the same
-        // intent, but the notice *replaced* what was on screen. Here the line
+        // The same intent as the notice this replaces, but that notice
+        // *replaced* what was on screen. Here the line
         // survives and the failure is readable on its own.
         final FakeHistoryStore store = FakeHistoryStore();
         final ChatController controller = ChatController(

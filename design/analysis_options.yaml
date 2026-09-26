@@ -1,0 +1,31 @@
+# Analiz ayarlari. `design/` bilincli olarak Flutter'siz saf Dart paketidir:
+# `dart test` token sozlesmesini Flutter arac zincirine ihtiyac duymadan
+# dogrulasin diye (bkz. `pubspec.yaml`).
+#
+# Uretilen dosya bu ilkeyi bozuyor ve bilincli olarak disarida birakildi:
+# `lib/generated/tokens.g.dart` `package:flutter/material.dart` import eder
+# (Color, FontWeight, Cubic, Duration tip degerleri uretilir), o yuzden saf Dart
+# altinda derlenemez. 2026-09-26'da olculdu: dosya eski yoluna uretilip
+# analiz edildiginde tam 1063 hata veriyordu.
+#
+# Bu bir gizlenmiş degil, belgelenmis bir istisna:
+#   * `dart test` uretilmis dosyayi BAYT OLARAK karsilastirir, derlemez; yani
+#     kontrast kapisi (816 olculmus oran) Flutter'siz calisir.
+#   * `tool/generate_tokens.dart` ve `test/contrast_test.dart` Flutter'siz
+#     derlenir ve bunlar tokenin dogru uretilmesinin sorumlulugudur.
+#   * Uretilen dosyayi `flutter analyze` ile denetlemek isteyenler `app/` icinden
+#     yapabilir; uygulama onu zaten kullaniyor.
+#
+# Kural: bu dizin uretilmis ciktiyi barindirir, elle duzenlenmez. Asil
+# sorumluluk `tokens.json` + `tool/generate_tokens.dart` +
+# `test/contrast_test.dart` uclusunundadir.
+analyzer:
+  exclude:
+    - lib/generated/**
+
+linter:
+  rules:
+    # Uretici deterministik olmak zorunda: siralama ve kume siralamasi
+    # ciktiyi bayt bayt degistirir, `--check` bayligi bu sozlesmeyi korur.
+    - prefer_final_locals
+    - unawaited_futures

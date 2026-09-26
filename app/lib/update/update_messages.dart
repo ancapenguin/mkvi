@@ -19,13 +19,12 @@ enum UpdateMessage {
   /// preflight can deliver, and the answer to "is updating even wired up".
   keyAccepted('Güncelleme denetimi tamam; yayın anahtarı geçerli.'),
 
-  /// The defect this layer exists to make visible: the key in
-  /// `src-tauri/tauri.conf.json:41` decodes to minisign's retired `Ed`
-  /// algorithm, so a strict verifier refuses every signature that key can ever
-  /// produce. The old updater reported that as "the download may be
-  /// tampered with", which sends a user hunting for an attacker who does not
-  /// exist, and it did so silently for every release. This line says what is
-  /// actually wrong and what to do about it.
+  /// The defect this layer exists to make visible: a release key in minisign's
+  /// retired `Ed` algorithm, which a strict verifier refuses for every
+  /// signature it can ever produce. The old updater reported that as "the
+  /// download may be tampered with", which sends a user hunting for an attacker
+  /// who does not exist, and it did so silently for every release. This line
+  /// says what is actually wrong and what to do about it.
   legacyKey(
     'Yayın anahtarı eski (legacy) biçimde. Bu anahtar prehashed biçimde '
     'yeniden üretilmeden hiçbir güncelleme imzası doğrulanamaz. Anahtarı '
@@ -36,6 +35,14 @@ enum UpdateMessage {
   /// make sense of. Never treated as "probably fine".
   keyUnreadable(
     'Yayın anahtarı okunamadı. Güncelleme güvenlik nedeniyle durduruldu.',
+  ),
+
+  /// The build carries no key at all. Only a release build compiled without
+  /// `--dart-define=MKVI_UPDATE_KEY_B64` can produce this, and the remedy is in
+  /// the sentence: a user cannot supply the key, and neither can a retry.
+  releaseKeyMissing(
+    'Bu sürümde yayın anahtarı gömülü değil, bu yüzden güncelleme yapılamıyor. '
+    'Yayın sürümü anahtar tanımlanmadan derlenmemeli.',
   ),
 
   /// The app's own version could not be read, so there is nothing to compare
@@ -64,9 +71,9 @@ enum UpdateMessage {
   /// "check for updates" gets an answer.
   alreadyUpToDate('Uygulama güncel; yeni bir sürüm bulunamadı.'),
 
-  /// The client asked too recently to ask again. The endpoint this release
-  /// shipped with answered 404 for its whole life, and a startup that re-asks
-  /// on every launch would keep asking it.
+  /// The client asked too recently to ask again. A startup that re-asks on every
+  /// launch would hit a public endpoint on every launch, which is both rude and
+  /// pointless.
   checkDeferred(
     'Güncelleme denetimi çok yakın zamanda yapıldı; şimdilik tekrar '
     'denenmiyor.',
@@ -76,8 +83,9 @@ enum UpdateMessage {
   /// manifest itself, and the wording says so.
   offered('Yeni bir sürüm bulundu. İndirme ve doğrulama sırada.'),
 
-  /// The feed could not be reached at all. TS: the 404 that `raw.githubusercontent`
-  /// gave for `ancapenguin/mkvi-updates` - the reason updating has never worked.
+  /// The feed could not be reached at all. In 0.1.x this was the everyday
+  /// answer, because the feed it was pointed at was a private repository that
+  /// served nobody.
   feedUnreachable(
     'Güncelleme bildirimine ulaşılamadı. Bağlantınızı denetleyin.',
   ),

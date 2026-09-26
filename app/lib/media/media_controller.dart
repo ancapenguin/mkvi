@@ -13,23 +13,19 @@ import 'screen_share_watchdog.dart';
 ///
 /// ## What it is for
 ///
-/// The Tauri build had no media layer: `ChatCallWorkspace.tsx` called
-/// `navigator.mediaDevices` directly, `App.tsx` called the senders directly, and
-/// nothing between them owned a track. Three live bugs follow from that, and each
-/// is answered by a decision in this file rather than by a comment:
+/// A camera API plus a set of senders, with nothing in between holding a track,
+/// has three live failure modes, and each is answered by a decision in this file
+/// rather than by a comment:
 ///
-/// 1. **A camera left on after the call.** `stopStream` existed in the component
-///    and was called from three different effects, one of which only ran on
-///    `callStatus === "ended"` — so a decline, a ring timeout or a failed publish
-///    left the camera live. Here there is one ledger ([_owned]) and one drain
-///    ([stop]), and every track the controller ever creates goes into it before
-///    anything can fail.
-/// 2. **A requested video call silently became audio-only.** The ladder at
-///    `ChatCallWorkspace.tsx:313-318` had a third rung
-///    `{audio: true, video: false}` whose only warning was "Kamera bulunamadı;
-///    arama yalnızca sesli başlayacak." The user's request was downgraded and the
-///    reason was buried in a box that also carries every other error. See
-///    [startCall].
+/// 1. **A camera left on after the call.** Stopping streams from wherever the
+///    call happens to end means a decline, a ring timeout or a failed publish can
+///    each take a different path and any of them can miss. Here there is one
+///    ledger ([_owned]) and one drain ([stop]), and every track the controller ever
+///    creates goes into it before anything can fail.
+/// 2. **A requested video call silently became audio-only.** A capture ladder
+///    whose last rung is `{audio: true, video: false}` downgrades the user's
+///    request, and if the only warning is buried in a box that also carries every
+///    other error, the downgrade is invisible. See [startCall].
 /// 3. **An English exception in a Turkish UI.** See [classifyMediaFault].
 ///
 /// ## The one rule about negotiation
@@ -256,8 +252,8 @@ final class MediaController {
   /// Captures and publishes what the call needs, or reports why it cannot.
   ///
   /// `video: true` means the user pressed the video button, and that request is
-  /// honoured or **reported** — never quietly downgraded. The ladder has two rungs,
-  /// not the three the TypeScript original had:
+  /// honoured or **reported** — never quietly downgraded. The ladder has exactly
+  /// two rungs:
   ///
   /// | rung | request | outcome |
   /// |---|---|---|
@@ -265,11 +261,11 @@ final class MediaController {
   /// | 2 | camera only | video-only, with [MediaTexts.microphoneMissingInVideoCall] |
   /// | — | ~~microphone only~~ | **removed** |
   ///
-  /// The removed rung is `ChatCallWorkspace.tsx:317`: after both rungs above had
-  /// failed it asked for `{audio: true, video: false}` and reported success. A user
-  /// who asked for video and got a silent audio call, with the reason buried in a
-  /// warning line, has been told nothing. So when both rungs fail the call
-  /// **fails**, with a Turkish reason.
+  /// A third rung — fall back to `{audio: true, video: false}` and report success
+  /// — is what a silent audio call looks like from the peer's side, with the
+  /// reason buried in a warning line. A user who asked for video and got that has
+  /// been told nothing. So when both rungs fail the call **fails**, with a
+  /// Turkish reason.
   ///
   /// The degradation that *is* permitted is the one whose effect the user can still
   /// see: a video call whose microphone is missing continues as a video call and
@@ -419,10 +415,10 @@ final class MediaController {
   ///
   /// Works during a voice call, which is the point: the camera transceiver was
   /// negotiated as `sendrecv` at [open], so turning the camera on mid-call is one
-  /// `replaceTrack` and no offer. The TypeScript original could not do this without
-  /// adding a transceiver, and therefore a renegotiation, which is why the Dart call
-  /// machine's `upgradeToVideo` has promised a frameless upgrade since the port
-  /// began.
+  /// `replaceTrack` and no offer. That is also why the call machine's
+  /// `upgradeToVideo` can promise a frameless upgrade: adding a transceiver here
+  /// would be a renegotiation, and renegotiating is the thing this layer is built
+  /// to avoid.
   Future<MediaOutcome> enableCamera({
     String? deviceId,
   }) => _serialized(() async {
@@ -457,9 +453,9 @@ final class MediaController {
   /// Detaches the camera with `replaceTrack(null)` and stops its track.
   ///
   /// Not a mute: the track is stopped, so the camera light goes out. A muted camera
-  /// would keep encoding black frames forever, which is what a half-finished
-  /// `toggleCamera` left behind in `ChatCallWorkspace.tsx:401` whenever the
-  /// `replaceTrack` that followed it rejected.
+  /// would keep encoding black frames forever, and a detach whose `replaceTrack`
+  /// then rejects leaves a camera that is neither sending nor stopped — lit, and
+  /// streaming nothing, with no way for the user to tell.
   Future<MediaOutcome> disableCamera() => _serialized(() async {
     if (_disposed) return MediaFailed(_unavailable(MediaSourceKind.camera));
     if (_senders == null) {
@@ -578,9 +574,10 @@ final class MediaController {
   /// Mutes or unmutes the published microphone **without detaching it**.
   ///
   /// `track.enabled = false` keeps the sender alive and encoding silence, so the
-  /// peer sees a quiet microphone rather than a broken track. That is the
-  /// behaviour the TypeScript original got right at `ChatCallWorkspace.tsx:390`,
-  /// and it is the whole reason muting is not `replaceTrack(null)`.
+  /// peer sees a quiet microphone rather than a broken track. That is the whole
+  /// reason muting is not `replaceTrack(null)`: detaching the microphone would
+  /// renegotiate it away, and a renegotiation mid-call is exactly what this layer
+  /// refuses to do.
   Future<MediaOutcome> muteMicrophone({required bool muted}) =>
       _serialized(() async {
         if (_disposed) {
@@ -873,9 +870,10 @@ final class MediaController {
   /// `replaceTrack` on one sender, with a real rollback.
   ///
   /// The previous track is stopped **only after** the new one is in place, so a
-  /// failed publish leaves the call exactly as it was — the same discipline as
-  /// `peer-transport.ts:152-161`, which restores both senders when either
-  /// `replaceTrack` rejects. A `null` [next] is the ordinary detach.
+  /// failed publish leaves the call exactly as it was. When either sender's
+  /// `replaceTrack` rejects, the other is restored too: a screen share that
+  /// started and a camera that did not would leave the call in a state the user
+  /// never asked for. A `null` [next] is the ordinary detach.
   Future<MediaFault?> _attach(
     MediaSenderHandle sender,
     MediaTrackHandle? next,

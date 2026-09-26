@@ -1,19 +1,19 @@
 /// The encrypted peer record and the store that reads it.
 ///
-/// `src/services/local-security.ts:30-43` is the TypeScript original. Two things
-/// are structurally different here, and both of them are the white pairing
-/// screen:
+/// ## Why a peer read has three answers and not one nullable value
 ///
-/// 1. `loadKnownPeer()` returns `KnownPeer | null`, and a REJECTED promise also
-///    leaves `knownPeer` null on the React side (`src/App.tsx:153-165`: the
-///    `.catch` only called `setNotice`). So "this device has never paired" and
-///    "the store could not be read" were the same value, and
-///    `src/App.tsx:545` gated the pairing screen on it. [PeerReadResult] has
-///    three answers, not two, and none of them is a nullable peer.
-/// 2. Nothing here is allowed to throw out of `readPeer()`. A throw is still
-///    legal, and [SessionBootstrap] maps it to
-///    [PeerStoreUnavailable], but a store that expresses failure as a value
-///    cannot be forgotten at a call site.
+/// Both of these are structurally different here, and both of them are the white
+/// pairing screen:
+///
+/// 1. "This device has never paired" and "the store could not be read" must not
+///    be the same value. When they are, a transient keyring or database failure
+///    renders as "you have no peer, please pair again" — and the user's remedy
+///    (re-pair) cannot fix a read error, so they pair a second time and lose the
+///    record they already had. [PeerReadResult] has three answers, not two, and
+///    none of them is a nullable peer.
+/// 2. Nothing here is allowed to throw out of [readPeer]. A throw is still
+///    legal, and [SessionBootstrap] maps it to [PeerStoreUnavailable], but a store
+///    that expresses failure as a value cannot be forgotten at a call site.
 library;
 
 import 'dart:convert';
@@ -23,9 +23,8 @@ import 'package:mkvi/core/protocol/text_sanitizer.dart';
 /// One paired peer.
 ///
 /// MKVI pairs one device with exactly one peer, so this is a single value and
-/// not a list. `src/services/local-security.ts:36-43` already narrows the
-/// stored list to `peers[0]`, and a multi-peer shape would only let the UI lie
-/// about how many people are on the other end.
+/// not a list. A multi-peer shape would only let the UI lie about how many
+/// people are on the other end.
 final class KnownPeer {
   const KnownPeer({
     required this.publicKey,
@@ -34,16 +33,16 @@ final class KnownPeer {
     required this.pairedAtMs,
   });
 
-  /// Builds the record a finished pairing writes, with the `src/App.tsx:438`
-  /// downgrade fixed.
+  /// Builds the record a finished pairing writes, without the placeholder
+  /// downgrade.
   ///
-  /// The TypeScript original wrote
-  /// `display_name: peerAnnouncedName || defaultPeerName`, and
-  /// `peerAnnouncedName` is only set once the peer's `profile` frame arrives.
-  /// Re-pairing therefore replaced a name the user had been looking at for
-  /// months with the placeholder `"Kişi"` every single time the channel came
-  /// up before the profile did. [freshAnnouncedName] may be null or empty here,
-  /// and [previousAnnouncedName] survives that.
+  /// Writing `freshAnnouncedName ?? defaultAnnouncedName` here is wrong, and
+  /// subtly so: the peer's announced name is only known once its `profile` frame
+  /// arrives, which can be *after* pairing completes. Re-pairing therefore
+  /// replaced a name the user had been looking at for months with the
+  /// placeholder `"Kişi"` every single time the channel came up before the
+  /// profile did. [freshAnnouncedName] may be null or empty here, and
+  /// [previousAnnouncedName] survives that.
   factory KnownPeer.forPairing({
     required String publicKey,
     required String discoveryId,
@@ -60,8 +59,7 @@ final class KnownPeer {
     pairedAtMs: pairedAtMs,
   );
 
-  /// The placeholder shown when a peer has never announced a name. TS:
-  /// `defaultPeerName` at `src/App.tsx:31`.
+  /// The placeholder shown when a peer has never announced a name.
   static const String defaultAnnouncedName = 'Kişi';
 
   /// The peer's Ed25519 public key. This is the peer's identity; every alias
@@ -116,8 +114,9 @@ final class KnownPeer {
 }
 
 /// Hides a bearer capability in a log line without hiding the fact that there
-/// is one. `src/App.tsx` had no equivalent, which is how a discovery id ended
-/// up in a user-facing notice more than once.
+/// is one. Without this, a discovery id ends up in a user-facing notice more
+/// than once — and a capability in a screenshot is a capability in an attacker's
+/// hands.
 String maskCapability(String capability) =>
     capability.length <= 6 ? '***' : '${capability.substring(0, 6)}…';
 
@@ -240,10 +239,10 @@ final class PeerRecordCorrupt extends PeerReadFailure {
 
 /// The encrypted peer store.
 ///
-/// The Rust bridge behind `src/services/local-security.ts` does not exist in
-/// the Flutter port yet, so this is an interface and a test injects a fake.
-/// Production will implement it over `flutter_secure_storage` plus the same
-/// `mkvi_core` record format; nothing above this line changes when it arrives.
+/// The Rust bridge that will back this does not exist in the Flutter port yet, so
+/// this is an interface and a test injects a fake. Production will implement it
+/// over `flutter_secure_storage` plus the same `mkvi_core` record format;
+/// nothing above this line changes when it arrives.
 abstract class PeerStore {
   /// Reads the stored peer. Must not throw; see the library header.
   Future<PeerReadResult> readPeer();

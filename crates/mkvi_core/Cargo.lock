@@ -798,7 +798,7 @@ checksum = "871285dc19d8d0ebe0eef3d0e99a205f2a71363b122632cbbfa4a6c370a960ce"
 
 [[package]]
 name = "mkvi_core"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "base64",
  "chacha20poly1305",

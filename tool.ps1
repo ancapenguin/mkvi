@@ -18,14 +18,14 @@
 
 .EXAMPLE
     .\tool.ps1 gate      # butun dogrulamalar
-    .\tool.ps1 gate -Quick   # yalniz hizli olanlar (tsc, vitest, dart analyze)
-    .\tool.ps1 spike     # Hafta 0 probu derlemesi
+    .\tool.ps1 gate-quick   # yalniz hizli olanlar (analyze)
+    .\tool.ps1 build     # uygulamanin release derlemesi
     .\tool.ps1 version   # surum kaynaklarini karsilastir
     .\tool.ps1 clean     # uretim girdilerini sil
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('gate', 'gate-quick', 'spike', 'version', 'clean', 'resources', 'help')]
+    [ValidateSet('gate', 'gate-quick', 'build', 'version', 'docs', 'clean', 'resources', 'help')]
     [string]$Task = 'gate'
 )
 
@@ -89,9 +89,26 @@ function Invoke-Check {
 
 function Test-Encoding {
     Write-Step 'Kodlama denetimi (BOM ve mojibake)'
-    $roots = @('src', 'app/lib', 'app/test', 'crates', 'cloudflare/src', 'design') |
+    # 2026-09-26: `src/` 0.1.x Tauri hattiyle birlikte silindi ve yerine
+    # `app/lib` geldi. `cloudflare/src` Worker icindir ve kaliyor.
+    #
+    # 2026-09-26 (ayni gun, ikinci duzeltme): kok `.md` dosyalari KAPSAM DIYDI.
+    # Yani README, SECURITY, CONTRIBUTING, THIRD-PARTY-NOTICES, NOTICE ve
+    # ARCHITECTURE bu denetimden gecmiyordu - oysa Turkce metnin en yogun
+    # oldugu dosyalar tam olarak bunlar. Bir kapi, denetledigi seyi yazmazsa
+    # denetlemiyor demektir.
+    $roots = @('app/lib', 'app/test', 'app/windows', 'crates', 'cloudflare/src', 'design', 'docs') |
         Where-Object { Test-Exists $_ }
-    if ($roots.Count -eq 0) { Add-Result 'Kodlama denetimi' 'ATLANDI' '(kaynak klasoru yok)'; return }
+    $rootDocs = @(
+        'README.md', 'SECURITY.md', 'CONTRIBUTING.md', 'CODE_OF_CONDUCT.md',
+        'THIRD-PARTY-NOTICES.md', 'NOTICE', 'ARCHITECTURE.md', 'ROADMAP.md',
+        'AGENTS.md', 'CLAUDE.md', 'VERSION'
+    ) | Where-Object { Test-Path (Join-Path $root $_) }
+
+    if ($roots.Count -eq 0 -and $rootDocs.Count -eq 0) {
+        Add-Result 'Kodlama denetimi' 'ATLANDI' '(kaynak klasoru yok)'
+        return
+    }
 
     # 1) Turkce metin tutan kaynaklarda BOM olmamali. .ps1 disinda istisna yok.
     $bomOffenders = New-Object System.Collections.Generic.List[string]
@@ -99,22 +116,30 @@ function Test-Encoding {
     $mojibakeOffenders = New-Object System.Collections.Generic.List[string]
     $textExtensions = @('.dart', '.ts', '.tsx', '.rs', '.json', '.jsonc', '.yaml', '.yml', '.toml', '.md', '.css', '.html')
 
+    # Denetlenecek dosyalar: once dizinler, sonra kok dosyalar. Ikisi de ayni
+    # kurallardan gecer; ayri bir dongu yazmamak, iki yerde farkli kural
+    # birakmaktan iyidir.
+    $filesToCheck = New-Object System.Collections.Generic.List[string]
     foreach ($r in $roots) {
         Get-ChildItem -Path (Join-Path $root $r) -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $textExtensions -contains $_.Extension.ToLowerInvariant() } |
-            ForEach-Object {
-                $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
-                if ($bytes.Length -lt 3) { return }
-                if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-                    $bomOffenders.Add($_.FullName.Replace($root + '\', ''))
-                }
-                # Mojibake kontrolu: dosyayi UTF-8 olarak okuyup bozuk bayt aramak yerine
-                # tipik bozukluk desenlerini ariyoruz.
-                $text = [System.Text.Encoding]::UTF8.GetString($bytes)
-                if ($text -match 'Ã¶|Ã¼|Ã§|Ã¶|Å\u015f|Ä\u0131|Å°|Ã„|â€™|â€œ|â€') {
-                    $mojibakeOffenders.Add($_.FullName.Replace($root + '\', ''))
-                }
-            }
+            ForEach-Object { $filesToCheck.Add($_.FullName) }
+    }
+    foreach ($d in $rootDocs) { $filesToCheck.Add((Join-Path $root $d)) }
+
+    foreach ($f in $filesToCheck) {
+        if (-not (Test-Path $f)) { continue }
+        $bytes = [System.IO.File]::ReadAllBytes($f)
+        if ($bytes.Length -lt 3) { continue }
+        if ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            $bomOffenders.Add($f.Replace($root + '\', ''))
+        }
+        # Mojibake kontrolu: dosyayi UTF-8 olarak okuyup bozuk bayt aramak yerine
+        # tipik bozukluk desenlerini ariyoruz.
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        if ($text -match 'Ã¶|Ã¼|Ã§|Ã¶|Å\u015f|Ä\u0131|Å°|Ã„|â€™|â€œ|â€') {
+            $mojibakeOffenders.Add($f.Replace($root + '\', ''))
+        }
     }
 
     if ($bomOffenders.Count -gt 0) {
@@ -127,15 +152,12 @@ function Test-Encoding {
 
     # Ham NUL bayti: git dosyayi binary sayip diffi korl ediyor.
     $nulOffenders = New-Object System.Collections.Generic.List[string]
-    foreach ($r in $roots) {
-        Get-ChildItem -Path (Join-Path $root $r) -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $textExtensions -contains $_.Extension.ToLowerInvariant() } |
-            ForEach-Object {
-                $bytes = [System.IO.File]::ReadAllBytes($_.FullName)
-                for ($i = 0; $i -lt $bytes.Length; $i++) {
-                    if ($bytes[$i] -eq 0) { $nulOffenders.Add($_.FullName.Replace($root + '\', '')); break }
-                }
-            }
+    foreach ($f in $filesToCheck) {
+        if (-not (Test-Path $f)) { continue }
+        $bytes = [System.IO.File]::ReadAllBytes($f)
+        for ($i = 0; $i -lt $bytes.Length; $i++) {
+            if ($bytes[$i] -eq 0) { $nulOffenders.Add($f.Replace($root + '\', '')); break }
+        }
     }
     if ($nulOffenders.Count -gt 0) {
         Add-Result 'Kodlama: ham NUL bayti' 'KALDI' ("$($nulOffenders.Count) dosyada: " + ($nulOffenders -join ', '))
@@ -192,6 +214,141 @@ function Test-Resources {
     return $true
 }
 
+function Test-VersionConsistency {
+    <#
+        Surumun kaynaklarini okur ve KARSILASTIRIR; ayrisma varsa KALDI doner.
+
+        Neden bu bir yazdirma degil de bir kapi: 2026-09-26'da olculdu. VERSION
+        0.2.0, app/pubspec.yaml 0.2.0+1 idi ama src-tauri/Cargo.toml,
+        tauri.conf.json, package.json ve iki crate 0.1.4'te kalmisti.
+        `publish-update.yml` surumu `tauri.conf.json`'dan okuyor, yani `v0.2.0`
+        etiketiyle tetiklense bile besleme 0.1.4 yayinliyordu. Ustelik Flutter
+        istemcisi `UpdateConfig.currentVersion` 0.2.0 oldugu icin 0.1.4
+        beslemesini "daha yeni degil" sayiyordu: dogru yayinlansa bile 0.2.0
+        istemcisi guncellenmeyi hic gormezdi.
+
+        `app/pubspec.yaml` yorumu "CI ikisinin eslestigini dogrular" diyordu;
+        boyle bir adim ne CI'da ne de tool.ps1'de vardi.
+
+        IKI GRUP, FARKLI KURALLAR (2026-09-26'da TEK GRUBA INDIRILDI):
+
+        Once iki grup vardi. CANLI (karsilastirilir): VERSION,
+        app/pubspec.yaml, iki crate. DONMUS (yazdirilir, karsilastirilmaz):
+        src-tauri/Cargo.toml, tauri.conf.json, package.json - 0.1.x Tauri
+        hatti, Faz 8'de silinecekti.
+
+        **0.1.x hatti 2026-09-26'da emekliye ayrildi ve silindi.** Kullanici
+        karari: geriye donuk uyumluluk, migration ve eski istemcilerin otomatik
+        guncellenmesi gerekmiyor; iki kullanicinin ikisi de yeni surumu elle
+        kuracak. Bu yuzden "donmus" grup kalmadi ve karsilastirma tek gruba
+        indi.
+
+        Neden o zaman iki grupti, cunku donmus hatta 0.1.4 DOGRU bir bilgiydi:
+        kapida sayilmasaydi kapi surekli kirmizi kalir ve kirmizi bir kapi
+        bakimsiz bir kapiye donusur. Simdi o tuzak yok.
+    #>
+    Write-Step 'Surum kaynaklari'
+    $live = [ordered]@{}
+
+    if (Test-Exists 'VERSION') { $live['VERSION'] = (Get-Content (Join-Path $root 'VERSION') -Raw).Trim() }
+
+    $pub = Get-Content (Join-Path $root 'app\pubspec.yaml') -Raw
+    if ($pub -match "(?m)^version:\s*([0-9][^\s]*)") {
+        # `0.2.0+1` -> `0.2.0`: build metasi surumun parcasi degil.
+        $live['app/pubspec.yaml'] = ($Matches[1] -split '\+')[0]
+    }
+    foreach ($toml in @('crates\mkvi_core\Cargo.toml', 'crates\mkvi_bridge\Cargo.toml')) {
+        if (Test-Exists $toml) {
+            $text = Get-Content (Join-Path $root $toml) -Raw
+            if ($text -match '(?m)^version\s*=\s*"([^"]+)"') {
+                $live[($toml -replace '\\', '/')] = $Matches[1]
+            }
+        }
+    }
+    # 2026-09-26: bu kaynak 2026-09-26'da kapiya eklendi. Dart tarafi 0.1.4'te
+    # kalmisti ve Rust tarafi 0.2.0'a gecmisken kapi yesildi - yani ayrilma
+    # olmadigi halde kapi gormuyordu. Kapi, gormedigi seyi yazmaz.
+    $bridgeDart = 'crates\mkvi_bridge\dart\pubspec.yaml'
+    if (Test-Exists $bridgeDart) {
+        $text = Get-Content (Join-Path $root $bridgeDart) -Raw
+        if ($text -match '(?m)^version:\s*([0-9][^\s]*)') {
+            $live['crates/mkvi_bridge/dart/pubspec.yaml'] = ($Matches[1] -split '\+')[0]
+        }
+    }
+    # 0.1.x Tauri hatti 2026-09-26'da emekliye ayrildi ve silindi; artik
+    # karsilastirilacak donmus bir grup yok. CANLI grup tek gruptur.
+
+    $baseline = $null
+    $mismatches = New-Object System.Collections.Generic.List[string]
+    foreach ($entry in $live.GetEnumerator()) {
+        if ($null -eq $baseline) { $baseline = $entry.Value }
+        $same = ($entry.Value -eq $baseline)
+        $colour = if ($same) { 'DarkGray' } else { 'Red' }
+        Write-Host ("   {0,-46} {1}" -f $entry.Key, $entry.Value) -ForegroundColor $colour
+        if (-not $same) { $mismatches.Add("$($entry.Key) = $($entry.Value)") }
+    }
+    # Yayin harti etiketten okur; etiket ile dosya ayrisma durumunda yayin
+    # yanlis surumle baslar ve bu sessizce olur. Bu yuzden yaziliyor.
+    $tag = $env:GITHUB_REF_NAME
+    if ($tag -and $tag -match '^v?(\d+\.\d+\.\d+)' -and $baseline -ne $Matches[1]) {
+        Write-Host ("   ETIKET v$($Matches[1]), dosya surumu $baseline -> yayin yanlis surumle baslar") -ForegroundColor Red
+    }
+
+    if ($mismatches.Count -gt 0) {
+        Add-Result 'Surum tutarliligi' 'KALDI' ("$($mismatches.Count) kaynak ayri (referans $baseline): " + ($mismatches -join ', '))
+    } else {
+        Add-Result 'Surum tutarliligi' 'GECTI' "hepsi $baseline"
+    }
+}
+
+function Sync-ClaudeMirror {
+    <#
+        CLAUDE.md, AGENTS.md'nin TURETI. Elle yazilmaz; buradan uretilir.
+
+        Neden bir ture araci, iki dosyayi elle esitlemek degil:
+
+        Iki yazili kaynak bir gun ayrisir ve ayrisma SESSIZ olur. 0.1.x
+        doneminde tam olarak bu oldu: `CLAUDE.md` `.gitignore`'daydi, yani git
+        izlemiyordu ve public depoya hic girmeyecekti. Dosya oradaydi, ama kimse
+        - katilimci da dahil - onu goremeyecekti. Iki yazili kaynagin
+        ayrilmasi bir tesaduf degil, bir zaman meselesidir.
+
+        Bu yuzden: tek yazili kaynak (AGENTS.md) + turet (CLAUDE.md).
+        Arac ayrilmasi bir gunde degil, her kapida yakalar.
+
+        Cikti BOM'SUZ yazilir. Kaynak da BOM'suz; bir turet BOM tasimamali.
+        Satir sonu CRLF: PowerShell 5.1'in Turkce okumasi icin.
+    #>
+    Write-Step 'CLAUDE.md aynasi (AGENTS.md -> CLAUDE.md)'
+
+    if (-not (Test-Exists 'AGENTS.md')) {
+        Add-Result 'CLAUDE.md aynasi' 'KALDI' 'AGENTS.md yok; kaynak dosya bulunamadi'
+        return
+    }
+
+    $banner = @(
+        '<!-- GENERATED FILE - DO NOT EDIT. Source of truth: AGENTS.md -->',
+        '<!-- Regenerate with: .\tool.ps1 docs -->',
+        ''
+    ) -join "`r`n"
+
+    $source = [System.IO.File]::ReadAllText((Join-Path $root 'AGENTS.md'))
+    $generated = $banner + $source
+
+    $target = Join-Path $root 'CLAUDE.md'
+    $current = if (Test-Exists 'CLAUDE.md') {
+        [System.IO.File]::ReadAllText($target)
+    } else { '' }
+
+    if ($current -ne $generated) {
+        $utf8 = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($target, $generated, $utf8)
+        Add-Result 'CLAUDE.md aynasi' 'GECTI' 'yeniden uretildi (AGENTS.md degismis)'
+    } else {
+        Add-Result 'CLAUDE.md aynasi' 'GECTI' 'guncel'
+    }
+}
+
 function Show-Summary {
     Write-Host ''
     Write-Host '============================================================' -ForegroundColor DarkGray
@@ -212,24 +369,19 @@ function Show-Summary {
 switch ($Task) {
 
     'version' {
-        $version = (Get-Content (Join-Path $root 'VERSION') -Raw).Trim()
-        Write-Host "VERSION dosyasi: $version" -ForegroundColor Cyan
-        $pub = Get-Content (Join-Path $root 'app\pubspec.yaml') -Raw
-        if ($pub -match "(?m)^version:\s*([0-9][^\s]*)") { Write-Host "app/pubspec.yaml: $($Matches[1])" }
-        $cargo = Get-Content (Join-Path $root 'src-tauri\Cargo.toml') -Raw
-        if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { Write-Host "src-tauri/Cargo.toml: $($Matches[1])" }
-        $conf = Get-Content (Join-Path $root 'src-tauri\tauri.conf.json') -Raw
-        if ($conf -match '"version"\s*:\s*"([^"]+)"') { Write-Host "tauri.conf.json: $($Matches[1])" }
+        Test-VersionConsistency
+        Show-Summary
         break
     }
 
     'gate-quick' {
-        Write-Host 'HIZLI KAPI (tsc + vitest + flutter analyze)' -ForegroundColor Yellow
-        Invoke-Check -Name 'tsc --noEmit' -WorkDir '.' -Command @('npx', 'tsc', '--noEmit')
-        Invoke-Check -Name 'vitest (root)' -WorkDir '.' -Command @('npx', 'vitest', 'run')
+        Write-Host 'HIZLI KAPI (flutter analyze + dart analyze design)' -ForegroundColor Yellow
         if (Test-Exists 'app') {
             Invoke-Check -Name 'flutter analyze (app)' -WorkDir 'app' -Command @('flutter', 'analyze', '--no-pub')
         } else { Add-Result 'flutter analyze (app)' 'ATLANDI' '(app/ yok)' }
+        if (Test-Exists 'design\pubspec.yaml') {
+            Invoke-Check -Name 'dart analyze (design)' -WorkDir 'design' -Command @('dart', 'analyze')
+        }
         Show-Summary
         break
     }
@@ -243,20 +395,42 @@ switch ($Task) {
         # kirmizi cikmasi kod hatasi degildir ve yanlis teşhis edilir.
         if (-not (Test-Resources)) { Show-Summary; break }
 
-        # 1) Web / TypeScript (donmus Tauri hatti)
-        Invoke-Check -Name 'tsc --noEmit' -WorkDir '.' -Command @('npx', 'tsc', '--noEmit')
-        Invoke-Check -Name 'vitest (root, worker dahil)' -WorkDir '.' -Command @('npx', 'vitest', 'run')
+        # 0) Surum tutarliligi. Yayin harti etiketten okur; dosya surumu ile
+        #    etiket ayrisma durumunda yayin yanlis surumle basar. Once olcum,
+        #    sonra derleme.
+        Test-VersionConsistency
 
-        # 2) Rust cekirdek
-        Invoke-Check -Name 'cargo test (src-tauri)' -WorkDir 'src-tauri' -Command @('cargo', 'test', '--locked')
+        # 0b) CLAUDE.md aynasi. Kapinin bir parcasi cunku bayat bir kilavuz
+        #     hicbir seyi yazmaz: 0.1.x'te `.gitignore`'da oldugu icin public
+        #     depoya hic girmiyordu. Burada URETILIR - biri elle
+        #     AGENTS.md'yi degistirdiginde fark bir sonraki kapida yakalanir.
+        Sync-ClaudeMirror
+
+        # 1) Rust cekirdek. 0.1.x Tauri hatti silindigi icin `src-tauri` artik
+        #    yok ve kapi onu kosmuyor.
         if (Test-Exists 'crates\mkvi_core') {
-            Invoke-Check -Name 'cargo test (mkvi_core)' -WorkDir 'crates\mkvi_core' -Command @('cargo', 'test')
+            Invoke-Check -Name 'cargo test (mkvi_core)' -WorkDir 'crates\mkvi_core' -Command @('cargo', 'test', '--locked')
         } else { Add-Result 'cargo test (mkvi_core)' 'ATLANDI' '(crates/mkvi_core yok)' }
+        # mkvi_bridge 15 testini 2026-09-26'ya kadar hicbir yer kosmuyordu: ne
+        # tool.ps1 ne ci.yml. Kapida olmamak "yesil" demek degil, hic olculmemek
+        # demek; bu yuzden burada.
+        if (Test-Exists 'crates\mkvi_bridge') {
+            Invoke-Check -Name 'cargo test (mkvi_bridge)' -WorkDir 'crates\mkvi_bridge' -Command @('cargo', 'test')
+        } else { Add-Result 'cargo test (mkvi_bridge)' 'ATLANDI' '(crates/mkvi_bridge yok)' }
 
-        # 3) Sinyalleme sunucusu
+        # 2) Sinyalleme sunucusu (Cloudflare Worker). Yalniz Worker TypeScript'i
+        #    kaldi; kok `package.json` ve `vitest` 0.1.x ile birlikte silindi.
         if (Test-Exists 'cloudflare\node_modules') {
             Invoke-Check -Name 'wrangler deploy --dry-run' -WorkDir 'cloudflare' -Command @('npm', 'run', 'check')
+            Invoke-Check -Name 'vitest (worker)' -WorkDir 'cloudflare' -Command @('npx', 'vitest', 'run')
         } else { Add-Result 'wrangler deploy --dry-run' 'ATLANDI' '(cloudflare/node_modules yok)' }
+
+        # 3) Tasarim sistemi. `design/` bilincli olarak Flutter'siz saf Dart
+        #    paketidir; kontrast kapisi Flutter arac zincirine ihtiyac duymaz.
+        if (Test-Exists 'design\pubspec.yaml') {
+            Invoke-Check -Name 'dart analyze (design)' -WorkDir 'design' -Command @('dart', 'analyze')
+            Invoke-Check -Name 'dart test (design kontrast)' -WorkDir 'design' -Command @('dart', 'test')
+        } else { Add-Result 'dart test (design)' 'ATLANDI' '(design/ yok)' }
 
         # 4) Flutter uygulamasi
         if (Test-Exists 'app') {
@@ -267,12 +441,7 @@ switch ($Task) {
             Invoke-Check -Name 'flutter test (app)' -WorkDir 'app' -Command @('flutter', 'test')
         } else { Add-Result 'flutter test (app)' 'ATLANDI' '(app/ yok)' }
 
-        # 5) Tasarim sistemi
-        if (Test-Exists 'design\pubspec.yaml') {
-            Invoke-Check -Name 'dart test (design kontrast)' -WorkDir 'design' -Command @('dart', 'test')
-        } else { Add-Result 'dart test (design)' 'ATLANDI' '(design/ yok)' }
-
-        # 6) Kodlama kurallari
+        # 5) Kodlama kurallari
         Test-Encoding
 
         Show-Summary
@@ -285,32 +454,24 @@ switch ($Task) {
         break
     }
 
-    'spike' {
-        # Iskelet kalici degil: spike/ altinda yalnizca README.md durur, iki
-        # komutla geri olusur. O olmadigi icin "yok" demiyoruz, nasil
-        # olusturulacagini soyluyoruz.
-        if (-not (Test-Exists 'spike\README.md')) {
-            Write-Host 'spike/ yok. Olusturmak icin:' -ForegroundColor Yellow
-            Write-Host '  flutter create spike --platforms=windows --org dev.mkvi --project-name mkvi_spike' -ForegroundColor Yellow
-            Write-Host '  cd spike; flutter pub add flutter_webrtc' -ForegroundColor Yellow
-            break
-        }
-        if (-not (Test-Exists 'spike\pubspec.yaml')) {
-            Write-Host 'spike iskeleti silinmis (yalnizca README.md var).' -ForegroundColor Yellow
-            Write-Host 'Olusturmak icin:' -ForegroundColor Yellow
-            Write-Host '  flutter create spike --platforms=windows --org dev.mkvi --project-name mkvi_spike' -ForegroundColor Yellow
-            Write-Host '  cd spike; flutter pub add flutter_webrtc' -ForegroundColor Yellow
-            Write-Host 'Ayrinti: spike/README.md' -ForegroundColor DarkGray
-            break
-        }
+    'build' {
+        # Uygulamanin gercek derlemesi. 0.1.x'te `.\tool.ps1 spike` bunu
+        # yapiyordu; simdi hedef uygulamanin kendisi.
         if (-not (Test-Resources)) { Show-Summary; break }
-        Invoke-Check -Name 'spike derlemesi (release)' -WorkDir 'spike' -Command @('flutter', 'build', 'windows', '--release')
+        if (-not (Test-Exists 'app')) { Add-Result 'flutter build' 'ATLANDI' '(app/ yok)'; Show-Summary; break }
+        Invoke-Check -Name 'flutter build (app, release)' -WorkDir 'app' -Command @('flutter', 'build', 'windows', '--release')
+        Show-Summary
+        break
+    }
+
+    'docs' {
+        Sync-ClaudeMirror
         Show-Summary
         break
     }
 
     'clean' {
-        $targets = @('app\build', 'app\.dart_tool', 'spike\build', 'spike\.dart_tool', 'design\.dart_tool', 'dist')
+        $targets = @('app\build', 'app\.dart_tool', 'design\.dart_tool')
         foreach ($t in $targets) {
             $p = Join-Path $root $t
             if (Test-Path $p) { Remove-Item $p -Recurse -Force; Write-Host "silindi: $t" -ForegroundColor Green }

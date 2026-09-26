@@ -1,0 +1,139 @@
+# MKVI — yayın
+#
+# 2026-09-26'da yeniden yazıldı. Önceki `publish-update.yml`, kullanıcı
+# tarafından silinmiş `ancapenguin/mkvi-updates` deposunu SSH ile klonlayıp
+# `latest.json`'ı oraya push ediyordu. **Bu yapısal olarak imkânsızdı:**
+# `raw.githubusercontent.com` gizli bir depoyu kimlik doğrulanmamış istemciye
+# servis etmez. Deploy key yalnız *yazma* izni verir, okuma izni vermez.
+# Güncelleme hiç çalışmamış olmasının sebebi buydu.
+#
+# Şimdi: feed bu deponun **Releases**'inde. `releases/latest/download/latest.json`
+# resmî Tauri yoludur ve anonim olarak okunabilir.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Yayınlanacak etiket (örn. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  surum-denetimi:
+    name: Sürüm denetimi
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Etiket ile dosya sürümü ayrışırsa yayın yanlış sürümle başlar ve bu
+      # sessizce olur. 0.2.0'ın `currentVersion`'ı 0.1.4'lük bir beslemeyi
+      # "daha yeni değil" sayardı.
+      - id: check
+        name: Etiket ile VERSION eşleşiyor mu
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          echo "etiket: $TAG · VERSION: $FILE_VERSION"
+          if [ "$TAG" != "v$FILE_VERSION" ]; then
+            echo "::error::etiket v$FILE_VERSION olmali, $TAG geldi"
+            exit 1
+          fi
+          # Kapının geri kalanı: pubspec ve iki crate de aynı sürümü göstermeli.
+          ./tool.ps1 version
+          echo "version=$FILE_VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Derle ve yayınla
+    needs: surum-denetimi
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Rust bağımlılıklarını ön derle
+        run: cargo build --release --manifest-path crates/mkvi_bridge/Cargo.toml
+
+      - name: Bağımlılıkları kur (app)
+        working-directory: app
+        run: flutter pub get
+
+      - name: Uygulamayı derle
+        working-directory: app
+        # `--dart-define` ZORUNLU. `app/lib/update/update_config.dart:73,82` bu
+        # iki değeri `String.fromEnvironment` ile okuyor ve **varsayılanları
+        # yok** — bilinçli. Boş bırakılırsa derleme yine geçer ama uygulama
+        # açılışta preflight'ta Türkçe bir cümleyle "yayın anahtarı yok" der,
+        # yani sürüm yayınlanır ve **güncelleme çalışmaz**. Kapı, sessizce
+        # çalışmayan bir sürüm üretmemek için bunu açıkça ister.
+        #
+        # Sürüm `VERSION` dosyasından okunur, elle yazılmaz: elle yazılan
+        # sürüm etiketle ayrışır ve yayın yanlış sürümle başlar.
+        run: |
+          flutter build windows --release `
+            --dart-define=MKVI_VERSION=${{ needs.surum-denetimi.outputs.version }} `
+            --dart-define=MKVI_UPDATE_KEY_B64=${{ secrets.MKVI_UPDATE_KEY_B64 }}
+        env:
+          # Anahtar GitHub secret'ında; depoda değil. `.pub` yarısıdır (genel
+          # anahtar) — gizli değil, ama derlemeden sonra değiştirilemez olmalı.
+          MKVI_UPDATE_KEY_B64: ${{ secrets.MKVI_UPDATE_KEY_B64 }}
+
+      # --- TODO(0.2.0 öncesi): imzalama ---
+      #
+      # Yayın imzası Flutter tarafında üretilmez; `mkvi_core::update`
+      # doğrulaması Rust'ta ve **prehashed (`ED`)** imza ister. 0.1.x'in
+      # `Ed` anahtarı yalnız legacy imza üretir, katı doğrulayıcı onu
+      # `LegacyKey` hatasıyla reddeder (bkz. `app/lib/update/update_verifier.dart`
+      # ve `crates/mkvi_core/src/update.rs`).
+      #
+      # Bu adım şunları bekliyor:
+      #   1. Yeni prehashed anahtar üretimi (minisign veya eşdeğeri).
+      #   2. Anahtarın `app/` derlemesine gömülmesi.
+      #   3. Buraya `.sig` üretme ve `latest.json` yazma adımı.
+      #
+      # Bu tamamlanana kadar **sürüm yayınlanabilir ama otomatik güncelleme
+      # çalışmaz**; iki kullanıcı da yeni sürümü elle kurar. Bu gerçek
+      # README.md ve SECURITY.md'de yazılı.
+      - name: Artifactları topla
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist-artifacts
+          $exe = Get-ChildItem app\build\windows\x64\runner\Release\*.exe
+          foreach ($f in $exe) {
+            Copy-Item $f.FullName "dist-artifacts\$(Split-Path $f.Name -Leaf)"
+            Write-Host "toplandi: $($f.Name)"
+          }
+          if (-not (Get-ChildItem dist-artifacts)) {
+            throw "derlenmis exe yok; build basarisiz mi?"
+          }
+
+      - name: GitHub Release yayınla
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ needs.surum-denetimi.outputs.version }}
+          draft: true
+          generate_release_notes: true
+          files: |
+            dist-artifacts/*
+
+      # TODO(0.2.0 öncesi): `latest.json` buraya yazılacak.
+      # Şema: `crates/mkvi_core/src/update.rs` (`parse_feed`) ve
+      # `app/lib/update/update_manifest.dart` aynı şemayı bekliyor.

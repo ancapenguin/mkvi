@@ -4,8 +4,7 @@ import 'peer_protocol.dart';
 import 'peer_protocol_exception.dart';
 import 'transfer_id.dart';
 
-/// One binary file frame, laid out byte for byte as the TypeScript transport
-/// emits and consumes it:
+/// One binary file frame, laid out byte for byte as both ends must agree on it:
 ///
 /// ```text
 /// offset 0            1 byte    frame tag, always PeerProtocol.fileFrameTag
@@ -13,17 +12,16 @@ import 'transfer_id.dart';
 /// offset 17 ..        n bytes   file payload
 /// ```
 ///
-/// TS: the `frame` built in `streamFile` and the `receiveFrame` reader. The
-/// header is `FILE_FRAME` (1) plus `FILE_ID_BYTES` (16), so
-/// `FILE_HEADER_BYTES` is 17.
+/// The header is therefore [PeerProtocol.fileFrameHeaderBytes] — tag plus the
+/// transfer id's raw bytes — and the id travels as *bytes*, not as its 32
+/// character hex text, so a frame header is a fixed size.
 ///
 /// There is **no length prefix**. The frame length is implicit — it is however
-/// many bytes the data channel delivered past the header — and the TypeScript
-/// original never read a length field either. A frame is therefore only ever
-/// "short" in the sense that the transport cut it, and the receiver catches that
-/// by comparing the running total against the size declared in the `file-offer`.
-/// A frame carrying zero payload bytes is rejected outright, which is what
-/// `bytes.byteLength <= FILE_HEADER_BYTES` did.
+/// many bytes the data channel delivered past the header. A frame is therefore
+/// only ever "short" in the sense that the transport cut it, and the receiver
+/// catches that by comparing the running total against the size declared in the
+/// `file-offer`. A frame carrying zero payload bytes is rejected outright,
+/// because it would advance nothing and can only be a mistake.
 final class FileFrame {
   const FileFrame({required this.id, required this.payload});
 
@@ -57,8 +55,9 @@ final class FileFrame {
 
   /// Reads a frame, rejecting anything that is not one.
   ///
-  /// TS: the guard at the top of `receiveFrame`, including its order — the
-  /// length is checked before the tag, and both raise the same message.
+  /// The length is checked before the tag, and both raise the same message: a
+  /// frame too short to hold a header has no tag to check, so checking the tag
+  /// first would read a byte that is not there.
   static FileFrame decode(List<int> bytes) {
     if (bytes.length <= PeerProtocol.fileFrameHeaderBytes ||
         bytes[0] != PeerProtocol.fileFrameTag) {

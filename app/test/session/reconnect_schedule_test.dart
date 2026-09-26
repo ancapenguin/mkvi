@@ -1,9 +1,9 @@
 /// The reconnect backoff, pinned.
 ///
-/// `src/App.tsx:216` starts at 700 ms, `src/App.tsx:306` multiplies by 1.8 and
-/// caps at 12 s, and `src/App.tsx:289` only tells the user once the sleep
-/// reaches 2.8 s. None of it needs a socket, and none of it needs 40 seconds of
-/// waiting, because it is a pure function of the consecutive-failure count.
+/// It starts at 700 ms, multiplies by 1.8 and caps at 12 s, and the user is only
+/// told once the sleep reaches 2.8 s. None of it needs a socket, and none of it
+/// needs 40 seconds of waiting, because it is a pure function of the
+/// consecutive-failure count.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -37,12 +37,12 @@ void main() {
   });
 
   test('the integer arithmetic matches Math.round(delay * 1.8) for 40 steps', () {
-    // The port multiplies in integers so the schedule cannot drift. This is the
-    // check that the integer form is the same function as the TypeScript
-    // original's floating-point one, for every value the schedule visits.
+    // The schedule multiplies in integers so it cannot drift. This is the check
+    // that the integer form is the same function as a floating-point one, for
+    // every value the schedule visits.
     for (int failures = 0; failures < 40; failures += 1) {
       final int ported = reconnectBackoffDelay(failures).inMilliseconds;
-      // A local copy of `src/App.tsx:216` + `:306`, evaluated in doubles.
+      // A local copy of the schedule, evaluated in doubles.
       double original = 700;
       for (int step = 0; step < failures; step += 1) {
         original = original * reconnectBackoffFactor;
@@ -86,7 +86,7 @@ void main() {
   });
 
   test('the user is told from the fourth failure onwards, the 2.8 s gate', () {
-    // TS: `if (!cancelled && delay >= 2_800) setNotice(...)` at `src/App.tsx:289`.
+    // The notice gate, asked as one question.
     expect(reconnectNoticeThreshold, const Duration(milliseconds: 2800));
     expect(shouldReportReconnectFailure(0), isFalse);
     expect(shouldReportReconnectFailure(1), isFalse);

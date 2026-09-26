@@ -55,9 +55,9 @@ String encodeQueryComponent(String value) {
 /// The leading `?` is NOT included: `Uri(query: ...)` adds it, and a doubled `?`
 /// would be read as part of the first parameter's name by the server.
 ///
-/// Entries are emitted in iteration order, so callers pass a `LinkedHashMap` to
-/// control the order the way the TypeScript client's `searchParams.set` calls
-/// determine it. The endpoint's own query is never inherited: the path is fixed
+/// Entries are emitted in iteration order, so callers pass a `LinkedHashMap` when
+/// the order matters — the query is part of the contract the vectors pin. The
+/// endpoint's own query is never inherited: the path is fixed
 /// (`/v1/rendezvous`, `/v1/peer`), so the Worker routes on the parameters below
 /// and nothing else.
 String encodeQuery(Map<String, String> parameters) {

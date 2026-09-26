@@ -77,10 +77,9 @@ final class FakeTrack implements MediaTrackHandle {
 /// A [MediaSenderHandle] that records every `replaceTrack`, and can be told to
 /// refuse.
 ///
-/// The refusal is what the TypeScript build could not survive: `peer-transport.ts`
-/// `setLocalStream` restores both senders when either `replaceTrack` rejects, and
-/// `ChatCallWorkspace.tsx:414-415` stops the new camera when the publish fails.
-/// Both are pinned here.
+/// The refusal is the interesting part: when either `replaceTrack` rejects, the
+/// other sender is restored and the new camera is stopped rather than left
+/// half-attached. Both are pinned here.
 final class FakeSender implements MediaSenderHandle {
   FakeSender({required this.slot, this.id = ''});
 
@@ -141,8 +140,8 @@ final class FakeRegistry implements MediaSenderRegistry {
   final StreamController<void> _renegotiations =
       StreamController<void>.broadcast(sync: true);
 
-  /// Every transceiver slot created, in order. The port of
-  /// `peer-transport.ts:78-80`: audio, camera, screen, all `sendrecv`.
+  /// Every transceiver slot created, in order: audio, camera, screen, all
+  /// `sendrecv`.
   final List<String> slots = <String>[];
 
   /// When set, [open] throws this.

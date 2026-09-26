@@ -14,8 +14,9 @@
 ///   what semver's identifier ordering reduces to for the ASCII tags a release
 ///   actually uses.
 /// * An optional `+build` suffix, which is dropped before anything else: semver
-///   gives build metadata no precedence, so `0.1.4+build.9` is not newer than
-///   `0.1.4`.
+///   gives build metadata no precedence, so `1.2.3+build.9` is not newer than
+///   `1.2.3`. This is also why `pubspec.yaml`'s `0.2.0+1` can be handed to
+///   `UpdateConfig.currentVersion` unchanged.
 /// * A leading `v` and surrounding whitespace are tolerated, because a tag
 ///   written `v0.1.5` is unambiguous.
 /// * Anything unreadable, on either side, means "not newer". Never "newer".

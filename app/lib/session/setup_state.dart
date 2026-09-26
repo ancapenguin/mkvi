@@ -1,12 +1,11 @@
 /// The app's top-level state, as a closed set of values.
 ///
-/// The white pairing screen was not a rendering bug. `src/App.tsx` had exactly
-/// four returns, and the pairing screen was the fallback one - reached whenever
-/// `knownPeer === null`. A first run, a corrupt store and a transient IPC
-/// failure all left `knownPeer` null (`src/App.tsx:163-164` only set a notice),
-/// so two of the three showed the first-run screen. Someone closing and
-/// reopening the app after a failed read landed on a blank pairing screen with
-/// no way back.
+/// The white pairing screen was not a rendering bug, it was a *type* bug. When
+/// the UI decided what to render from a single nullable "known peer" value, the
+/// pairing screen was the fallback branch — reached by a first run, by a corrupt
+/// store, and by a transient read failure alike. Two of those three showed the
+/// first-run screen, so someone closing and reopening the app after a failed read
+/// landed on a blank pairing screen with no way back.
 ///
 /// The fix is not a branch, it is a type. [SetupState] has one case per thing
 /// that can actually be true, and exactly one method -
@@ -58,7 +57,8 @@ sealed class SetupState {
   String get detail;
 
   /// Whether the chat and call surface may be shown. The saved pair owns the
-  /// main screen even while it is offline (`src/App.tsx:206`).
+  /// main screen even while it is offline — going "offline" must not take the
+  /// user's conversation away.
   bool get showsWorkspace;
 
   /// Whether the UI must offer a plain "try the read again" action.
@@ -74,8 +74,8 @@ sealed class SetupState {
   bool get offersPairNewDevice;
 }
 
-/// `src/App.tsx:535-537` rendered a boot screen for this state; here it is a
-/// value, so it cannot leak into a pairing render.
+/// The one state that exists only while the store is being read. It is a value
+/// rather than a rendering branch, so it cannot leak into a pairing render.
 final class SetupRestoring extends SetupState {
   const SetupRestoring();
 

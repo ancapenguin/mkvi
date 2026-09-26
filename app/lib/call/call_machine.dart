@@ -1,24 +1,24 @@
 /// The call state machine: one call, one status, two symmetric 45 s timeouts.
 ///
-/// ## What this replaces
+/// ## Why the state is one enum and not three maps
 ///
-/// The TypeScript original keeps the whole call in three maps of
-/// `src/services/peer-transport.ts` — `pendingCalls` (the caller), `incomingCalls`
-/// (the callee) and `activeCallId` (both, once accepted) — and `App.tsx` guesses
-/// the user-visible status from `Set<string>` membership. That shape is the direct
-/// cause of the four live bugs this port closes:
+/// The call has exactly one lifecycle, and modelling it as separate pending,
+/// incoming and active collections is what produced the four defects below: each
+/// one is a direct consequence of guessing a status by set membership, and each
+/// is now structurally impossible.
 ///
-/// 1. **No answer step.** 0.1.4 auto-accepted, so the callee's call opened by
-///    itself. Here [accept] is the only way in and it is guarded.
-/// 2. **No ring timeout on the callee.** The caller has `CALL_OFFER_TIMEOUT_MS`;
-///    the callee had nothing, so a ringing dialog could stay on screen forever
-///    with both buttons disabled. Here both sides arm a 45 s timer and the
-///    callee's sends a `call-decline` with [CallMessages.ringTimeoutReason].
-/// 3. **`call-declined` was never handled.** It is a [CallDeclined] outcome here,
-///    distinct from [CallTimedOut] and from [CallFailed].
-/// 4. **The callee published media before it accepted.** [accept] emits its
-///    actions in order — `call-accept` first, media second — and emits none at all
-///    when the call has already ended.
+/// 1. **An answer step exists.** Nothing auto-accepts: [accept] is the only way in
+///    and it is guarded against a call that has already ended.
+/// 2. **Both sides arm a 45 s timer.** An unanswered answer screen can therefore
+///    never stay up forever with both buttons disabled. The two timers are
+///    separate fields so a test can fire one and assert the other stayed put.
+/// 3. **A decline has its own outcome.** [CallDeclined] is distinct from
+///    [CallTimedOut] and from [CallFailed], because "she said no" and "she did not
+///    answer" are different facts and a missed-call list that cannot tell them
+///    apart is not a missed-call list.
+/// 4. **The callee never publishes before it accepted.** [accept] emits its actions
+///    in order — `call-accept` first, media second — and emits none at all when the
+///    call has already ended.
 ///
 /// ## What this deliberately does not do
 ///
@@ -66,13 +66,11 @@ final class CallMachine {
   }) : _now = now ?? DateTime.now,
        _newId = idFactory ?? randomTransferId;
 
-  /// TS: `CALL_OFFER_TIMEOUT_MS`, `src/services/peer-transport.ts:25`.
-  ///
   /// How long the caller waits for a `call-accept` before sending a `call-end`
   /// and giving up.
   static const Duration callOfferTimeout = Duration(seconds: 45);
 
-  /// The callee-side twin of [callOfferTimeout], and the timer 0.1.x did not have.
+  /// The callee-side twin of [callOfferTimeout].
   ///
   /// The two are separate fields, not one constant, so a test can make one of them
   /// fire and assert that the *other* one did not — which is the only way to prove
@@ -82,10 +80,10 @@ final class CallMachine {
   /// The only way a timer can be created in this package.
   final CallTimerStarter startTimer;
 
-  /// How long a ringing invitation is offered. TS: `CALL_OFFER_TIMEOUT_MS`.
+  /// How long a ringing invitation is offered.
   final Duration offerTimeout;
 
-  /// How long an answer screen waits. 0.1.x: no such timer existed.
+  /// How long an answer screen waits.
   final Duration ringTimeout;
 
   /// Called for every transition that changed something or put a frame on the
@@ -126,8 +124,8 @@ final class CallMachine {
       _missedCalls.isEmpty ? null : _missedCalls.last;
 
   /// Whether a call is live, i.e. whether starting or accepting another one is
-  /// refused. TS: the guard at the top of `requestCall`, plus the
-  /// `!["idle", "ended"].includes(callStatusRef.current)` test in `App.tsx:390`.
+  /// refused. This is the single guard, and it answers the one question every
+  /// entry point has to ask.
   bool get isBusy => _status.isLive;
 
   /// Whether an answer screen is waiting for the user.
@@ -149,13 +147,13 @@ final class CallMachine {
   /// Sends a `call-offer` and starts ringing.
   ///
   /// Refused with [CallRefusal.callInProgress] while any call is live, which is
-  /// the "Başka bir arama zaten etkin." of `requestCall` (`peer-transport.ts:105`)
-  /// turned from a rejected promise into a value.
+  /// the "Başka bir arama zaten etkin." a caller sees — a *value* here rather
+  /// than a rejected promise, so a UI can show it without a catch block.
   ///
   /// No media is published and no frame other than the offer goes out: the caller
   /// may keep a local preview, and the peer learns nothing about it until it
-  /// accepts. TS: `App.tsx:563-573` publishes with `setLocalStream` only *after*
-  /// `requestCall` resolves.
+  /// accepts. Publishing the preview after the offer would advertise a camera the
+  /// peer has not agreed to receive.
   ///
   /// [id] exists for tests and for a re-announcement; production should let the
   /// machine generate a bare 32 character hex id, because `parseControl` rejects
@@ -188,8 +186,8 @@ final class CallMachine {
   /// The peer accepted. Moves to [CallStatus.connecting] and asks for the media.
   ///
   /// Ignored unless this machine is the caller of exactly this call and is still
-  /// ringing. TS: `case "call-accept": if (!this.pendingCalls.has(message.id)) break;`
-  /// (`peer-transport.ts:427-432`).
+  /// ringing, so a stale or forged `call-accept` cannot pull a ringing callee or
+  /// a finished call back to [CallStatus.connecting].
   CallTransition onRemoteAccept({String? callId}) {
     final CallSession? ringing = _callerRinging(callId);
     if (ringing == null) return _unchanged();
@@ -213,13 +211,11 @@ final class CallMachine {
   ///
   /// * the id is already on screen — ignored, and the ring timer is **not**
   ///   re-armed, so a peer that re-announces every ten seconds cannot keep an
-  ///   answer dialog alive forever. TS: `if (this.incomingCalls.has(message.id)) break;`
-  ///   (`peer-transport.ts:422`);
+  ///   answer dialog alive forever;
   /// * a call is live — answered on the wire with a `call-decline` carrying
-  ///   [PeerProtocol.busyCallReason] ("Meşgul."), the reason
-  ///   `peer-transport.ts:419` used. TS: `App.tsx:391` used the longer "Karşı
-  ///   taraf başka bir görüşmede."; the shorter one is the one already in
-  ///   [PeerProtocol];
+  ///   [PeerProtocol.busyCallReason] ("Meşgul."), the short wording the protocol
+  ///   already owns, rather than a longer sentence that would have to be kept in
+  ///   sync with it;
   /// * otherwise — an answer screen, a 45 s ring timer, and **nothing on the
   ///   wire**, because the dialog promises that nothing is sent until the user
   ///   accepts.
@@ -258,15 +254,12 @@ final class CallMachine {
   /// Answers the ringing screen: `call-accept` first, media second.
   ///
   /// Refused with [CallRefusal.incomingCallNotFound] when there is no ringing
-  /// incoming call — which is exactly the race that made 0.1.4 unsafe: the
-  /// caller's 45 s `call-end` (or this machine's own ring timeout) lands while
-  /// the user is still opening the camera, and the answer button is still on
-  /// screen. A refusal puts no frame on the wire and asks for no media, so the UI
-  /// learns it must throw away the stream it just opened, and the peer is told
-  /// nothing about a call that is already over.
-  ///
-  /// TS: `acceptCall`, `peer-transport.ts:121-127`, which threw
-  /// "Gelen arama bulunamadı." for an id it did not hold.
+  /// incoming call — which is a real race, not a hypothetical one: the caller's
+  /// 45 s `call-end` (or this machine's own ring timeout) lands while the user is
+  /// still opening the camera, and the answer button is still on screen. A refusal
+  /// puts no frame on the wire and asks for no media, so the UI learns it must
+  /// throw away the stream it just opened, and the peer is told nothing about a
+  /// call that is already over. An exception here would strand that stream.
   CallTransition accept({String? callId}) {
     final CallSession? session = _session;
     if (session == null ||
@@ -282,8 +275,9 @@ final class CallMachine {
       next: CallStatus.connecting,
       actions: <CallAction>[
         // 1. The decision reaches the peer before anything is published, so the
-        //    callee's camera cannot be live before the callee said yes. The old
-        //    order was the reverse at `App.tsx:580-581`.
+        //    callee's camera cannot be live before the callee said yes. The
+        //    reverse order puts a live camera on the wire during a call the
+        //    callee may not even end up in.
         SendFrame(CallAcceptMessage(id: session.id)),
         // 2. Only now may the outside world open a camera.
         _publishFor(session.mode),
@@ -296,8 +290,9 @@ final class CallMachine {
   ///
   /// Idempotent: a second `decline` — from a double tap, or from a
   /// `declineIncomingCall` that runs after the ring timeout — is a silent no-op
-  /// and sends no second `call-decline`. TS: `declineCall`, which begins
-  /// `if (!this.incomingCalls.has(id)) return;` (`peer-transport.ts:132`).
+  /// and sends no second `call-decline`. The guard is on the *ringing* status
+  /// rather than on a stored id, so the check cannot be passed by holding a
+  /// record of a call that has already ended.
   ///
   /// Releases no media, because the callee has captured none: the media step does
   /// not exist before [accept].
@@ -341,8 +336,9 @@ final class CallMachine {
   /// This is the only step into [CallStatus.connected], and it is deliberately
   /// separate from [accept] / [onRemoteAccept] because publishing media is the
   /// transport's asynchronous job: the status must not claim a connection that
-  /// `replaceTrack` has not finished. TS: `App.tsx:571` and `:582` both set
-  /// `connected` after awaiting `setLocalStream`.
+  /// `replaceTrack` has not finished. Both entry points therefore wait for the
+  /// transport and *then* call this, which is what keeps `connected` from being
+  /// a promise rather than a fact.
   CallTransition onMediaReady() {
     final CallSession? session = _session;
     if (session == null || _status != CallStatus.connecting) {
@@ -357,10 +353,10 @@ final class CallMachine {
   ///
   /// No new call, no new id, no frame on the wire and no renegotiation: the Dart
   /// transport builds an audio, a camera and a screen transceiver as `sendrecv`
-  /// when the connection is created (TS: `peer-transport.ts:78-80`), so this is a
-  /// `replaceTrack` on a sender that already exists. The status does not change —
-  /// a connected call stays connected — and [CallSession.mode] is how the UI (and
-  /// a test) reads that the upgrade happened.
+  /// when the connection is created, so this is a `replaceTrack` on a sender that
+  /// already exists. The status does not change — a connected call stays
+  /// connected — and [CallSession.mode] is how the UI (and a test) reads that the
+  /// upgrade happened.
   ///
   /// Refused with [CallRefusal.notConnected] unless the call is
   /// [CallStatus.connected], and with [CallRefusal.alreadyVideo] if the camera is
@@ -391,9 +387,8 @@ final class CallMachine {
   /// second `call-end`.
   ///
   /// [notifyPeer] is `false` only when the peer is the one that ended the call and
-  /// the local teardown must not echo a `call-end` back — TS:
-  /// `stopCall(notifyPeer)`, whose one `false` caller is the `call-end` branch of
-  /// `receiveControl` (`peer-transport.ts:441`).
+  /// the local teardown must not echo a `call-end` back. Exactly one caller needs
+  /// it, [onRemoteEnd]; every other end is local and does notify.
   ///
   /// Why the call ended, as recorded in [missedCalls]:
   /// [MissedCallReason.endedNormally] if it had connected, [MissedCallReason.declined]
@@ -418,10 +413,12 @@ final class CallMachine {
 
   /// The capture step or the transport failed.
   ///
-  /// A callee that cannot open its camera *declines* with the reason, which is
-  /// what `App.tsx:583-587` did by hand; a caller that cannot place the call
-  /// cancels it. Either way the result is [CallFailed], which is deliberately not
-  /// [CallDeclined]: one is a broken microphone, the other is a person saying no.
+  /// A callee that cannot open its camera *declines* with the reason — a person
+  /// is being told the call cannot happen, and the peer's history should read as
+  /// a decline; a caller that cannot place the call cancels it, because there is
+  /// nobody on the other end to decline to anything. Either way the result is
+  /// [CallFailed], which is deliberately not [CallDeclined]: one is a broken
+  /// microphone, the other is a person saying no.
   ///
   /// Ignored when no call is live, so a capture that fails after the call already
   /// ended changes nothing.
@@ -462,18 +459,15 @@ final class CallMachine {
 
   /// The peer sent `call-decline`.
   ///
-  /// **This is the outcome 0.1.4 had no consumer for.** `PeerTransportEvent`
-  /// declared `call-declined`, the transport emitted it, and nothing read it, so
-  /// the caller only learned about a decline from the rejection of the
-  /// `requestCall` promise and `App.tsx` showed it in the *media error* box. Here
-  /// it is a [CallDeclined] outcome, it survives [reset], and it is not a
-  /// [CallFailed].
+  /// A decline is a first-class outcome, not an error: a caller that treats it as
+  /// a failure cannot tell the user why the person hung up, and a caller that
+  /// waits for the connection to drop instead learns about it far too late. It
+  /// survives [reset], and it is not a [CallFailed].
   ///
   /// [reason] is the `reason` of a **parsed** [CallDeclineMessage]: the wire
   /// parser has already scrubbed control characters and capped it at
   /// [PeerProtocol.maxReasonLength]. An absent or empty reason falls back to
-  /// [PeerProtocol.defaultCallDeclineReason], the same fallback
-  /// `peer-transport.ts:434` used.
+  /// [PeerProtocol.defaultCallDeclineReason].
   CallTransition onRemoteDecline({String? callId, String? reason}) {
     final CallSession? ringing = _callerRinging(callId);
     if (ringing == null) return _unchanged();
@@ -503,9 +497,9 @@ final class CallMachine {
   ///
   /// Before the call connected this is a *cancellation*, after it an *end*, and
   /// the two get different outcomes and different history reasons, because a
-  /// missed-call list that cannot tell them apart is not a missed-call list. TS:
-  /// the `call-end` branch of `receiveControl`, which emitted `remote-call-ended`
-  /// and whose `App.tsx:404` notice is the "before" wording.
+  /// missed-call list that cannot tell them apart is not a missed-call list. The
+  /// "before" wording is the peer's cancellation notice, the "after" one is a
+  /// normal hangup.
   ///
   /// Ignored when no call is live, so a late `call-end` after a local hangup
   /// cannot produce a second history entry.
@@ -536,10 +530,8 @@ final class CallMachine {
   ///
   /// Refused with [CallRefusal.callStillRunning] while a call is live — that is
   /// the one thing a UI must not be able to do by accident — and a silent no-op
-  /// when already idle, so a second `reset()` after the first is harmless.
-  ///
-  /// TS: `clearCallView("idle")` in `App.tsx:559` and `changeCallStatus("idle")`
-  /// in the decline handler at `App.tsx:589`.
+  /// when already idle, so a second `reset()` after the first is harmless. Both
+  /// the normal return-to-idle and the post-decline return land here.
   CallTransition reset() {
     if (_status == CallStatus.idle) return _unchanged();
     if (_status.isLive) {
@@ -584,8 +576,9 @@ final class CallMachine {
     _session = ringing.copyWith(status: CallStatus.ended, endedAt: at);
     _apply(
       next: CallStatus.ended,
-      // TS: the caller sends a `call-end` before it gives up,
-      // `peer-transport.ts:110-113`.
+      // The caller tells the peer it is giving up before it stops its own
+      // capture: a silent `call-end` would leave the peer ringing a call that
+      // will never be answered.
       actions: <CallAction>[
         SendFrame(CallEndMessage(id: ringing.id)),
         if (_mayHaveCapture) const ReleaseMedia(),
@@ -660,9 +653,10 @@ final class CallMachine {
   // ---------------------------------------------------------------------
 
   /// The caller of [callId] while it is still waiting, or `null` for anything
-  /// else — which is what `case "call-accept"` and `case "call-decline"` need
-  /// (`peer-transport.ts:428` and `:434`, both guarded by
-  /// `if (!this.pendingCalls.has(message.id)) break;`).
+  /// else. Both remote-settle handlers need this, and both must be guarded by it:
+  /// a `call-accept` or `call-decline` that names a call this machine is not
+  /// ringing as caller has to be dropped, not applied to whatever call happens to
+  /// be live.
   ///
   /// Returning the session instead of a `bool` is what lets the caller sites use
   /// a promoted local, so no `!` is needed to reach `session.id` afterwards.

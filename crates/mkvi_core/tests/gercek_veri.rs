@@ -38,7 +38,14 @@ fn real_data_dir() -> Option<std::path::PathBuf> {
     )
 }
 
+// `#[ignore]` 2026-09-26'da eklendi. Dosya bunu daha once yaziyordu ama nitelik
+// yoktu: `cargo test --test gercek_veri -- --ignored` HICBIR TESTLE eslesmiyor,
+// hicbir sey kosmadan yesil geciyordu; `cargo test` (kapi) ise testi kosuyor ve
+// o da sessizce `return` ediyordu. Yani kapida olmayan bir test, kapida olan
+// ama hicbir sey olcmeyen bir test. Artik belgelenen komut gercekten bu testi
+// kosuyor ve kapi bunu atliyor.
 #[test]
+#[ignore = "gercek kurulumun verisini okur; MKVI_REAL_DATA=1 ile elle kosulur"]
 fn gercek_kurulum_verisi_aciliyor_mu() {
     let Some(path) = real_data_dir() else {
         eprintln!("atlandi: MKVI_REAL_DATA=1 verilmedi");

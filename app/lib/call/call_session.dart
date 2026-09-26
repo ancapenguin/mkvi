@@ -4,12 +4,12 @@ import 'call_status.dart';
 
 /// One call, as an immutable value.
 ///
-/// The TypeScript original has no such thing: the three maps
-/// (`pendingCalls`, `incomingCalls`, `activeCallId`) *are* the state, which is why
-/// "which side am I?" can only be answered by asking which map holds the id and
-/// why the caller's 45 s timeout and the callee's ring timeout cannot share one
-/// code path. One value with a [CallSide] is what lets both timers be the same
-/// shape and still mean different things.
+/// The call used to *be* three collections — one for the caller, one for the
+/// callee, one for the accepted call — which is why "which side am I?" could
+/// only be answered by asking which collection holds the id, and why the
+/// caller's 45 s timeout and the callee's ring timeout could not share one code
+/// path. One value with a [CallSide] is what lets both timers be the same shape
+/// and still mean different things.
 ///
 /// Every field is `final`; the machine replaces the whole value on each
 /// transition, so a session can be handed to the UI and stay valid for as long as
@@ -28,8 +28,8 @@ final class CallSession {
     this.endedAt,
   });
 
-  /// A bare 32 character lowercase hex id, the same shape `parseControl` requires
-  /// for every control frame. TS: `randomTransferId()`.
+  /// A bare 32 character lowercase hex id, the same shape the control parser
+  /// requires for every frame.
   final String id;
 
   /// The media the call was *started* with.
@@ -45,8 +45,9 @@ final class CallSession {
   /// Always equal to `CallMachine.status` for as long as the session exists.
   final CallStatus status;
 
-  /// When the session was created: `requestCall` for the caller, the arrival of
-  /// the `call-offer` for the callee. TS: `window.setTimeout` / `Map.set` time.
+  /// When the session was created: the moment the caller sent its offer, or the
+  /// moment the `call-offer` arrived for the callee. It is read from the injected
+  /// clock, never from a real timer, so a test can place it exactly.
   final DateTime startedAt;
 
   /// When the `call-offer` went on the wire. Equal to [startedAt] for the caller

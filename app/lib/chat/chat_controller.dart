@@ -3,29 +3,14 @@
 ///
 /// ## The defect this exists for
 ///
-/// `App.tsx` sent a message like this:
-///
-/// ```ts
-/// function sendMessage(body: string) {
-///   try {
-///     const id = peer.current?.sendChat(body);
-///     if (!id) throw new Error("Karşı cihaz çevrimdışı.");
-///     …append to state, append to history…
-///   } catch (error) { setNotice(…); }
-/// }
-/// ```
-///
-/// and the composer disabled itself when the peer was offline:
-///
-/// ```tsx
-/// <input … disabled={!peerOnline} placeholder={peerOnline ? … : "Mesaj göndermek için bağlantı bekleniyor"} />
-/// ```
-///
-/// So a message written during a reconnect — which is exactly when a user most
-/// wants to write one — could not be composed at all, and if the channel dropped
-/// between the field being enabled and the keypress landing, the text was gone.
-/// There was no queue, no optimistic echo and no retry: one throw and the line
-/// was never written down.
+/// A send used to be guarded by the peer being online, in two places at once: the
+/// composer disabled its field while the channel was down, and the send path threw
+/// if no channel existed. Both guards were aimed at the same failure, and both
+/// made the same failure worse — a message written during a reconnect, which is
+/// exactly when a user most wants to write one, could not be composed at all. And
+/// if the channel dropped between the field being enabled and the keypress
+/// landing, the text was simply gone: no queue, no optimistic echo, no retry, one
+/// throw and the line was never written down.
 ///
 /// This class inverts that. [send] never fails because the channel is down; it
 /// writes the line down first, marks it [MessageDelivery.sending] and holds it.
@@ -193,9 +178,11 @@ final class ChatController {
     }
   }
 
-  /// TS: the hard-coded `"default"` conversation id at `App.tsx:366` and
-  /// `App.tsx:500`. MKVI is a two-person app; the column is still named so the
-  /// day a group chat exists does not need a migration.
+  /// The conversation every message belongs to.
+  ///
+  /// MKVI is a two-person app, so there is exactly one. The column is still named
+  /// rather than assumed, so the day a group chat exists does not need a
+  /// migration of the stored history.
   static const String defaultConversationId = 'default';
 
   /// How many lines may be held while the channel is down.
@@ -307,8 +294,9 @@ final class ChatController {
     _timeline = _timeline.add(line, isPinned: _isPinned);
     _flush();
     // Emitted here rather than from `_flush`, so a send into a closed channel —
-    // the case that matters most, and the one 0.1.x could not represent — still
-    // rebuilds the surface. `_flush` emitting would have made this emit nothing.
+    // the case that matters most, and the one a channel-gated composer could not
+    // represent — still rebuilds the surface. `_flush` emitting would have made
+    // this emit nothing.
     _emit();
     return MessageQueued(id, delivered: !_isPinned(line));
   }
@@ -345,8 +333,8 @@ final class ChatController {
   /// Takes one `chat` frame off the wire.
   ///
   /// Returns `false` when the line is already held, which is the reply for a
-  /// frame the peer repeated: the id is the dedupe key, and 0.1.x appended
-  /// blindly, so a data channel that redelivered showed the same line twice.
+  /// frame the peer repeated: the id is the dedupe key, and appending blindly
+  /// meant a data channel that redelivered showed the same line twice.
   bool receive(ChatMessage frame) {
     if (_disposed || _timeline.contains(frame.id)) return false;
     final TimelineMessage line = TimelineMessage.fromFrame(frame);
@@ -393,8 +381,8 @@ final class ChatController {
   /// The reconnect loop reports that the data channel opened or closed.
   ///
   /// A close changes nothing but [isChannelOpen]: the queue, the conversation
-  /// and the delivery state of every line survive it, which is the property the
-  /// 0.1.x composer did not have. An open flushes.
+  /// and the delivery state of every line survive it, which is the property that
+  /// makes a queued message worth having. An open flushes.
   void reportChannelOpen(bool open) {
     if (_disposed) return;
     _channelOpen = open;

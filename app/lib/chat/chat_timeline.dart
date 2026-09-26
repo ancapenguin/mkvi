@@ -1,19 +1,18 @@
 /// The conversation as a value: ordered, deduplicated by id, grouped, day
 /// separated and bounded.
 ///
-/// ## What this replaces
+/// ## Why the conversation is a value
 ///
-/// `App.tsx` held `const [messages, setMessages] = useState<ChatMessage[]>([])`
-/// and appended to it forever. Nothing was ever removed, so a long-lived
-/// conversation grew without bound and every rebuild re-mapped the whole array.
-/// The two writes that made it worse were:
+/// An append-only list in mutable state cannot be trusted to stay a
+/// conversation. Nothing is ever removed from it, so a long-lived thread grows
+/// without bound and every rebuild re-maps the whole array. Two failure modes
+/// make it worse:
 ///
-/// * `setMessages((current) => [...current, message])` on an incoming frame, so
-///   the peer's clock decided where a line landed — a device whose clock lagged
-///   put its line *after* lines it had already caused;
-/// * `stored.reverse()` over the newest-first history page, which reverses the
-///   whole array every time it is loaded and therefore depends on the store
-///   keeping that order forever.
+/// * appending an incoming line to the end makes the *peer's clock* decide where
+///   it lands — a device whose clock lagged put its line *after* lines it had
+///   already caused;
+/// * reversing the newest-first history page on load reverses the whole array
+///   every time, and therefore depends on the store keeping that order forever.
 ///
 /// ## The four properties, and how each is enforced
 ///
@@ -83,10 +82,9 @@ final class ChatTimeline {
 
   /// Lines kept in memory at once.
   ///
-  /// 500 is a deliberate choice rather than the TypeScript original's
-  /// unboundedness: a screen shows a dozen bubbles, and a bound is what stops a
-  /// month-long conversation from turning every keystroke-triggered rebuild into
-  /// a 500-element walk — while still holding roughly a hundred turns of chat.
+  /// 500 is a deliberate choice: a screen shows a dozen bubbles, and a bound is
+  /// what stops a month-long conversation from turning every rebuild into a
+  /// 500-element walk — while still holding roughly a hundred turns of chat.
   static const int defaultWindow = 500;
 
   final List<TimelineMessage> _messages;

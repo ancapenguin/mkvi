@@ -1,9 +1,9 @@
 // The history entry every call leaves behind, and the four reasons it can have.
 //
-// 0.1.x left none: a declined call surfaced as a rejected promise, a timed-out one
-// as the same rejected promise with a different message, and a cancelled one as
-// nothing at all. One [MissedCall] per call, with a reason, is what the UI needs
-// to show a list at all.
+// There was no such record before: a declined call surfaced as a rejected
+// promise, a timed-out one as the same rejected promise with a different
+// message, and a cancelled one as nothing at all. One [MissedCall] per call,
+// with a reason, is what the UI needs to show a list at all.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/call/call.dart';

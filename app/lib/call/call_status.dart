@@ -2,34 +2,30 @@ import 'package:mkvi/core/protocol/control_message.dart';
 
 /// Which side of the call this device is on.
 ///
-/// TS: the transport is the same object on both ends and distinguishes the sides
-/// by *which* field holds the id — `pendingCalls` for the caller,
-/// `incomingCalls` for the callee. The Dart port has one session, so the side is
-/// a value in it and every guard can read it instead of guessing.
+/// The side is a *value* in the one session rather than an accident of which
+/// container happens to hold the call id, so every guard can read it explicitly
+/// instead of inferring it.
 enum CallSide { caller, callee }
 
-/// The six call states the old UI rendered.
+/// The six states a call can be in, with the label the UI shows for each.
 ///
-/// TS: `export type CallStatus` in `src/components/ChatCallWorkspace.tsx:15`, and
-/// [label] is the `statusLabels` entry of the same file. The set is *not* the
-/// transport's: the transport has no states at all, it has three maps
-/// (`pendingCalls`, `incomingCalls`, `activeCallId`) and lets `App.tsx` guess the
-/// rest. Collapsing them into one enum is what makes "the callee cannot accept
-/// a call that already ended" a compile-time-checkable condition instead of an
-/// `if` over a `Set<string>` of magic strings.
+/// The set is deliberately the UI's, not the transport's: the transport has no
+/// states at all, it has separate pending/incoming/active collections and leaves
+/// the status to be guessed. Collapsing them into one enum is what makes "the
+/// callee cannot accept a call that already ended" a compile-time-checkable
+/// condition instead of an `if` over a set of magic strings.
 enum CallStatus {
   /// No call, or a call the user has already been shown the end of.
   idle('Arama yok'),
 
   /// The invitation is on the wire and nobody has answered it yet.
-  ///
-  /// TS: `requestCall` is pending, i.e. `pendingCalls.size > 0`.
   outgoing('Yanıt bekleniyor'),
 
   /// A `call-offer` arrived and the user has not answered it yet.
   ///
-  /// TS: `incomingCalls.size > 0`. This state exists *only* in 0.1.4+; the
-  /// released 0.1.4 build auto-accepted, so there was no such window at all.
+  /// This state is a promise: nothing is on the wire and no capture is running
+  /// until the user accepts, which is why the callee's ring timer is the only
+  /// thing standing between this state and an answer dialog that never closes.
   incoming('Gelen arama'),
 
   /// Both sides accepted and the media is being published.
@@ -43,15 +39,14 @@ enum CallStatus {
 
   const CallStatus(this.label);
 
-  /// TS: `statusLabels[callStatus]`, `ChatCallWorkspace.tsx:202-209`.
+  /// The Turkish label the UI renders for this state.
   final String label;
 
   /// Whether a call is in progress, i.e. whether [CallMachine.startOutgoing] and
   /// [CallMachine.accept] must be refused.
   ///
-  /// TS: `if (this.activeCallId || this.pendingCalls.size || this.incomingCalls.size)`
-  /// in `requestCall`, and the `!["idle", "ended"].includes(callStatusRef.current)`
-  /// test in `App.tsx:390`.
+  /// One predicate, asked as one question. Every entry point consults it, so
+  /// "busy" cannot mean three slightly different things in three places.
   bool get isLive =>
       this == CallStatus.outgoing ||
       this == CallStatus.incoming ||
@@ -66,18 +61,15 @@ enum CallStatus {
   bool get isRinging => this == CallStatus.incoming;
 
   /// Whether the call got past both sides' accept, i.e. whether it counts as a
-  /// real conversation rather than an unanswered invitation.
-  ///
-  /// TS: `if (!["idle", "incoming", "ended"].includes(callStatusRef.current)`
-  /// in `App.tsx:399` — the same test, spelled as one question.
+  /// real conversation rather than an unanswered invitation. One question, asked
+  /// once, so "was this a real call?" cannot be answered three different ways.
   bool get isSettled =>
       this == CallStatus.connecting || this == CallStatus.connected;
 }
 
 /// Convenience: whether [mode] is a mode that publishes a camera track.
 ///
-/// The Dart transport has three `sendrecv` transceivers from the moment the
-/// connection is built — audio, camera, screen — so a mode is a *permission*, not
-/// a negotiation. TS: `this.audioTransceiver` / `this.cameraTransceiver` in
-/// `src/services/peer-transport.ts:78-80`, added once and never re-added.
+/// The transport has three `sendrecv` transceivers from the moment the connection
+/// is built — audio, camera, screen — so a mode is a *permission*, not a
+/// negotiation, and this is only the permission check.
 bool modeWantsVideo(CallMode mode) => mode == CallMode.video;

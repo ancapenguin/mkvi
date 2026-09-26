@@ -1,190 +1,111 @@
+# MKVI — sürekli entegrasyon
+#
+# Bu kapı `.\tool.ps1 gate`'in CI karşılığıdır. İkisi aynı adımları koşar;
+# biri yeni bir adım ekliyorsa diğeri de eklenmelidir, yoksa "yeşil" iki farklı
+# şeyi kastedecek.
+#
+# 2026-09-26'da 0.1.x Tauri hattı emekliye ayrıldı: kök `npm test` (vitest),
+# `tsc --noEmit` ve `cargo test --locked src-tauri` kaldırıldı çünkü artık
+# ölü kodu doğruluyorlardı. Bunun yerine `mkvi_bridge` testleri geldi — onlar
+# daha önce HİÇBİR YERDE koşmuyordu.
+
 name: CI
 
-# Bu iş akışı projedeki "tam gate"i birebir çalıştırır. Kapıyı tek komutta
-# toplayan karşılığı `tool.ps1 gate` — ikisi de aynı adımları koşmalıdır.
-#   1. npx tsc --noEmit
-#   2. npm test                                     (vitest)
-#   3. cd src-tauri && cargo test --locked
-#   4. cd crates/mkvi_core && cargo test --locked   (Rust çekirdeği)
-#   5. cd cloudflare && npm run check               (= wrangler deploy --dry-run)
-#   6. cd app && flutter analyze && flutter test     (Flutter uygulaması)
-#   7. cd design && dart test                        (kontrast testi)
-# Tam gate'in tanımı ve iki tuzağı için CONTRIBUTING.md §3'e bakın.
-#
-# 3 ve 4 ayrı adımdır ve ikisi de kapıdır: Rust çekirdeği crates/mkvi_core
-# paketine taşındığında testleri de taşındı, ama `cd src-tauri && cargo test`
-# onu yalnızca bağımlılık olarak DERLER, testlerini çalıştırmaz. Adım 3
-# olmadan çekirdek testleri hiç koşmaz; bu, 0.1.x'te sessizce kaybolan bir
-# kapsam kaybıdır, bu yüzden ikisi de kapıda ve ayrı yazılır.
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   pull_request:
 
-# Depo içeriğini okumak yeterli; hiçbir adım gizli değişken veya yazma izni kullanmaz.
 permissions:
   contents: read
 
-# Aynı dal için yeni bir push geldiğinde süren işler iptal edilir: PR'lar
-# güncel kodla yeniden koşar, çalışan runner israf edilmez.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  node:
-    name: Tip denetimi, vitest, Worker dry-run
+  surum:
+    name: Sürüm tutarlılığı
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Depoda .nvmrc YOKTUR. Node sürümü burada ve publish-update.yml'de açıkça
-      # sabitlenmiştir; ikisini birlikte güncelleyin. Bu proje Node 22 ile geliştirildi.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          # Kökte ve cloudflare/ altında AYNI paket adları (vitest, typescript)
-          # farklı sürümlerde kullanılıyor: kökte 5.8.3, cloudflare'de 5.9.3.
-          # İki lockfile'ın da hesaba katılması gerekiyor, yoksa cache isabet etmez.
-          cache-dependency-path: |
-            package-lock.json
-            cloudflare/package-lock.json
-
-      - name: Bağımlılıkları kur (kök)
-        run: npm ci
-
-      # --- Gate 1/7 · tsc ---
-      - name: tsc --noEmit
-        run: npx tsc --noEmit
-
-      # --- Gate 2/7 · vitest ---
-      # DİKKAT: kök vite.config.ts içinde `test` bloğu veya `include` globu YOK.
-      # vitest bu yüzden varsayılan globuyla tüm depoyu tarar ve
-      # cloudflare/src/index.test.ts dosyasını da çalıştırır. Bu kasıtlıdır.
-      # Buraya bir include globu eklemek Worker testlerini sessizce düşürür.
-      - name: vitest
-        run: npm test
-
-      # Engelleyici DEĞİL. Açık bir depoda her koşu canlı bağımlılık çözümlemesi
-      # yapar; denetim temiz değilse PR'ı durdurmak yerine sonucu not düşüyoruz.
-      - name: Bağımlılık denetimi (bilgilendirme amaçlı, engellemez)
-        continue-on-error: true
-        run: npm audit --audit-level=high
-
-      - name: Bağımlılıkları kur (cloudflare)
-        working-directory: cloudflare
-        run: npm ci
-
-      # --- Gate 5/7 · Worker dry-run ---
-      # `npm run check` = `wrangler deploy --dry-run`: yalnızca derler ve paketler,
-      # YAYINLAMAZ. Bu yüzden Cloudflare kimlik bilgisi istemez ve her yerde
-      # çalışır. (cloudflare/ içindeki `npm test` ayrıca çalıştırılmaz: o paket
-      # zaten kök `npm test`in alt kümesidir ve aynı dosyayı çalıştırır.)
-      - name: wrangler deploy --dry-run
-        working-directory: cloudflare
-        run: npm run check
+      # Sürümün dört kaynağı aynı sayıyı göstermeli: VERSION, app/pubspec.yaml,
+      # crates/mkvi_core, crates/mkvi_bridge. 2026-09-26'da ölçüldü: VERSION 0.2.0
+      # iken beş kaynak 0.1.4'te kalmıştı ve yayın hattı yanlış sürüm basıyordu.
+      - name: Sürüm kaynaklarını karşılaştır
+        shell: pwsh
+        run: ./tool.ps1 version
 
   rust:
-    name: cargo test (${{ matrix.os }})
+    name: Rust çekirdek + Dart köprüsü
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
 
-      # Node 22: publish-update.yml ile aynı sürüm, .nvmrc yok.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            cloudflare/package-lock.json
-
-      # keyring'in arka ucu HEDEFE GÖRE seçilir (windows-native / apple-native /
-      # sync-secret-service), bu yüzden Rust işi üç platformda da koşmalıdır:
-      # tek bir işletim sistemi yalnızca bir arka ucu derler.
-      #
-      # ubuntu-22.04, ubuntu-24.04 DEĞİL. Tauri'nin Debian tabanı 22.04'tür;
-      # daha yeni bir taban seçmek derlemenin gereken en düşük glibc sürümünü
-      # yükseltir ve kullanıcıların dağıtımlarında çalışmayı bozar.
-      - name: Tauri sistem bağımlılıkları (Linux)
+      # mkvi_core'in `rusqlite`'i bundled SQLite derler, yani C derleyicisi ister.
+      # Ubuntu 22.04'te ayrıca Tauri'nin sistem bağımlılıkları da gerekli değil
+      # artık (0.1.x emekliye ayrıldı) ama WebRTC/medya bağımlılıkları kaldı.
+      - name: Sistem bağımlılıkları (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev
+          sudo apt-get install -y pkg-config libssl-dev
 
-      - name: Bağımlılıkları kur (kök)
-        run: npm ci
-
-      # ÖNEMLİ: `npm run build`, `cargo test`'ten ÖNCE gelmelidir.
-      # tauri::generate_context!() derleme anında frontendDist'i (../dist) okur.
-      # dist/ .gitignore'dadır ve depoda yoktur; yoksa cargo test SADECE bu
-      # yüzden derleme hatası verir ve hata mesajı konuyu hiç ima etmez.
-      - name: Ön yüzü derle (cargo test'in ön koşulu)
-        run: npm run build
-
-      - name: Cargo bağımlılık önbelleği
-        uses: swatinem/rust-cache@v2
-        with:
-          # İki ayrı Rust paketi, iki ayrı target/ dizini. mkvi_core bir workspace
-          # üyesi olmadığı için src-tauri girdisi onu kapsamaz.
-          workspaces: |
-            ./src-tauri -> target
-            ./crates/mkvi_core -> target
-
-      # --- Gate 3/7 · Tauri adaptörü ---
-      # --locked: Cargo.lock'ta kayıtlı sürümler dışına çıkılmasını engeller.
-      # Bu, ikili dağıtılan bir Rust projesi için güvenlik açısından önemlidir.
-      # (rusqlite'in SQLite'i kaynak koddan derlediği için ilk koşu yavaştır.)
-      - name: cargo test
-        working-directory: src-tauri
-        run: cargo test --locked
-
-      # --- Gate 4/7 · Rust çekirdeği ---
-      # Rust ÇEKİRDEĞİ. `src-tauri` bu paketi yalnızca bağımlılık olarak
-      # derlediği için çekirdeğin testleri yalnızca burada koşar; bu adım
-      # kapının parçasıdır, isteğe bağlı değildir. Tauri'ye bağlı olmadığı
-      # için frontendDist okumaz, `npm run build` olmadan da derlenir; ancak
-      # rusqlite'in bundled SQLite'i C derleyicisi ister (Linux'ta yukarıda
-      # kuruldu).
-      - name: "cargo test (mkvi_core — Rust çekirdeği)"
+      # --- Gate · Rust çekirdek ---
+      # Ed25519 kimlik, keyring/DPAPI, XChaCha20-Poly1305'li SQLite, dosya
+      # yazma ve imza doğrulama. UI çerçevesi bilmez; `frontendDist` okumaz.
+      - name: "cargo test (mkvi_core)"
         working-directory: crates/mkvi_core
         run: cargo test --locked
 
+      # --- Gate · Dart köprüsü ---
+      # 2026-09-26'ya kadar 15 testi ne tool.ps1 ne bu dosya koşuyordu.
+      - name: "cargo test (mkvi_bridge)"
+        working-directory: crates/mkvi_bridge
+        run: cargo test
+
+  design:
+    name: Tasarım kontrastı
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+
+      # `design/` bilinçli olarak Flutter'sız saf Dart paketidir: kontrast kapısı
+      # 816 ölçülmüş oranı Flutter araç zincirine ihtiyaç duymadan koşar.
+      - run: dart pub get
+        working-directory: design
+
+      # `analysis_options.yaml` yalnız ÜRETİLEN dosyayı dışlar (o dosya
+      # `flutter/material` import eder ve saf Dart altında derlenemez). Üretici
+      # ve kontrast testi analiz kapsamındadır.
+      - name: dart analyze
+        working-directory: design
+        run: dart analyze
+
+      - name: dart test (kontrast)
+        working-directory: design
+        run: dart test
+
   flutter:
-    name: Flutter uygulaması + tasarım kontrastı
+    name: Flutter uygulaması
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Sürüm kasıtlı olarak kanal olarak sabitlenir (stable). Sürümü kilitlemek,
-      # kapının "şu anda bende geçiyor, sizde kırılır" hatasını üretir; Flutter'ı
-      # yükseltmek bilinçli bir karar olmalı.
+      # Kanal kasıtlı olarak sabitlenir. Sürümü kilitlemek, kapının "şu anda
+      # bende geçiyor, sizde kırılır" hatasını üretir.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
-      # --- Gate 6/7 · Flutter uygulaması ---
-      # `flutter test` bu aşamada yalnız Dart tarafını koşar (birim + widget
-      # testleri). Eklenti kodu derlenmez; bu yüzden Android SDK/NDK veya
-      # Windows runner gerekmez. `flutter build` CI'da çalıştırılmaz: spike/ ve
-      # app/ derlemesi yerelde `.\tool.ps1 spike` ile doğrulanır.
       - name: Bağımlılıkları kur (app)
         working-directory: app
         run: flutter pub get
@@ -193,18 +114,34 @@ jobs:
         working-directory: app
         run: flutter analyze --no-pub
 
+      # `flutter test` bu aşamada yalnız Dart tarafını koşar (birim + widget
+      # testleri). Eklenti kodu derlenmez; Android SDK/NDK gerekmez.
       - name: flutter test
         working-directory: app
         run: flutter test
 
-      # --- Gate 7/7 · Tasarım kontrastı ---
-      # design/ kendi bağımsız Dart paketidir ve kontrastı ölçer. Bu adım
-      # kırmızıysa bir tema rengi WCAG eşiğinin altına düşmüş demektir; 0.1.x'te
-      # 17 ihlal vardı ve hiçbiri yakalanmıyordu.
-      - name: Bağımlılıkları kur (design)
-        working-directory: design
-        run: dart pub get
+  worker:
+    name: Sinyalleşme Worker'ı
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
 
-      - name: dart test (kontrast)
-        working-directory: design
-        run: dart test
+      # Worker içerik taşımaz: `isSignalPayload` anahtar bazında beyaz liste
+      # kullanır. Anahtarı daraltmak, hâlâ gönderen istemcileri `close(1008)`
+      # ile düşürür — kırıcıdır.
+      - name: Bağımlılıkları kur
+        working-directory: cloudflare
+        run: npm ci
+
+      - name: vitest
+        working-directory: cloudflare
+        run: npx vitest run
+
+      - name: wrangler deploy --dry-run
+        working-directory: cloudflare
+        run: npm run check

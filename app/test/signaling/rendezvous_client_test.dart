@@ -1,4 +1,5 @@
-/// Client lifecycle tests, including the four the TypeScript suite does not have.
+/// Client lifecycle tests, including four that are easy to get wrong: the
+/// awkward orderings around open, message, close and error.
 ///
 /// Everything here runs without a server: the client is constructed with a
 /// [RecordingSocketFactory], and the fake socket is opened, fed and closed by
@@ -24,7 +25,7 @@ void main() {
     return (client: RendezvousClient(socketFactory: factory.call), factory: factory);
   }
 
-  group('the four cases the TypeScript suite lacks', () {
+  group('the four awkward orderings', () {
     test('reconnect after a close delivers onDisconnect exactly once', () async {
       final ({RendezvousClient client, RecordingSocketFactory factory}) first = build();
       final List<SignalingCloseEvent> disconnects = <SignalingCloseEvent>[];
@@ -165,7 +166,7 @@ void main() {
     });
   });
 
-  group('Dart-only behaviour the TypeScript client gets wrong', () {
+  group('behaviour a naive client gets wrong', () {
     test('an invalid endpoint rejects with the Turkish error, never a FormatException', () async {
       for (final String bad in <String>['', 'not-a-url', 'signal.example', 'https://', 'https://:99/x', '://x']) {
         final ({RendezvousClient client, RecordingSocketFactory factory}) harness = build();

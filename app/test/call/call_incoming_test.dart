@@ -1,9 +1,10 @@
-// The callee's half of the state machine: the answer screen that 0.1.4 did not
-// have, and the 45 s ring timeout it did not have either.
+// The callee's half of the state machine: the answer screen, and the 45 s ring
+// timeout that closes it.
 //
-// TS: `acceptCall` / `declineCall` and the `call-offer` branch of `receiveControl`
-// in `src/services/peer-transport.ts`, plus the `onAcceptIncomingCall` handler of
-// `src/App.tsx:574-589`.
+// Both of those are additions. An earlier build auto-accepted, so the callee's
+// call opened by itself and there was no such window; and the caller had a
+// timeout while the callee had none, so a ringing dialog could sit on screen
+// for ever with both buttons disabled.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/call/call.dart';
@@ -40,7 +41,7 @@ void main() {
       expect(harness.machine.isOfferTimerArmed, isFalse);
     });
 
-    // The promise the answer dialog makes, `ChatCallWorkspace.tsx:184`.
+    // The promise the answer dialog makes.
     test('no media step exists before the user accepts', () {
       final CallHarness harness = CallHarness();
       harness.ring(harness.nextId());
@@ -56,7 +57,8 @@ void main() {
       }
     });
 
-    // Bug 1: 0.1.4 auto-accepted, so the callee's call opened by itself.
+    // Bug 1: an earlier build auto-accepted, so the callee's call opened by
+    // itself.
     test('the call cannot open by itself: only accept() connects a callee', () {
       final CallHarness harness = CallHarness();
       final String id = harness.nextId();
@@ -151,7 +153,7 @@ void main() {
     });
 
     // A peer that re-announces its offer must not be able to keep the dialog up
-    // forever. TS: `if (this.incomingCalls.has(message.id)) break;`.
+    // forever.
     test('a repeated offer is ignored and does not re-arm the ring timer', () {
       final CallHarness harness = CallHarness();
       final String id = harness.nextId();
@@ -171,7 +173,7 @@ void main() {
   });
 
   group('accept', () {
-    // Bug 4: `App.tsx:580-581` published the callee's media *before* it accepted.
+    // Bug 4: the callee's media used to be published *before* it accepted.
     test('puts call-accept on the wire before the media step', () {
       final CallHarness harness = CallHarness();
       final String id = harness.nextId();
@@ -232,7 +234,7 @@ void main() {
         final String id = harness.nextId();
         harness.ring(id);
         // The caller's 45 s offer timeout reaches the callee as a `call-end`
-        // (`peer-transport.ts:110`), while the user is still opening the camera.
+        // while the user is still opening the camera.
         harness.machine.onRemoteEnd(callId: id);
         expect(harness.machine.status, CallStatus.ended);
         expect(

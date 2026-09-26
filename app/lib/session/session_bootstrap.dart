@@ -1,10 +1,10 @@
 /// One peer read, turned into one [SetupState].
 ///
 /// This is the whole of the white pairing screen fix, and it is a value
-/// computation with no UI in it. `src/App.tsx` decided what to render from the
-/// VALUE of `knownPeer`, so a first run, a corrupt store and a failed IPC call
-/// were the same value and two of them rendered pairing. Here the read has
-/// three outcomes and only one of them is a first run.
+/// computation with no UI in it. When what to render was decided from the VALUE
+/// of a single nullable peer, a first run, a corrupt store and a failed read
+/// were the same value and two of them rendered pairing. Here the read has three
+/// outcomes and only one of them is a first run.
 library;
 
 import 'peer_store.dart';
@@ -24,8 +24,8 @@ final class BootstrapOutcome {
     : state = const SetupState.reconnecting();
 
   /// A peer that exists and cannot be read. The pairing screen is not allowed
-  /// from here either, and this is the case the TypeScript original could not
-  /// express. Not `const`, because the failure is a runtime value.
+  /// from here either, and this is the case that cannot be expressed as the
+  /// absence of a peer. Not `const`, because the failure is a runtime value.
   BootstrapOutcome.broken(PeerReadFailure failure)
     : state = SetupState.broken(failure),
       peer = null;
@@ -50,16 +50,15 @@ final class SessionBootstrap {
   /// Every path out of here is [SetupState.broken], [SetupState.firstRun] or
   /// [SetupState.reconnecting]. There is no fourth path, and none of the three
   /// can be reached with `peer == null` except the first run and the broken
-  /// case - which is the distinction `src/App.tsx` did not have.
+  /// case.
   Future<BootstrapOutcome> restore() async {
     final PeerReadResult result;
     try {
       result = await peerStore.readPeer();
     } on Object {
-      // A store that throws is a store that cannot be read.
-      // `src/App.tsx:163-164` only called `setNotice` here and left
-      // `knownPeer` null, which is the exact value the pairing screen was
-      // gated on, so a transient IPC failure rendered the first-run screen.
+      // A store that throws is a store that cannot be read. Treating that as
+      // "no peer" is what rendered the first-run screen for a transient
+      // failure.
       return BootstrapOutcome.broken(const PeerStoreUnavailable());
     }
     return switch (result) {

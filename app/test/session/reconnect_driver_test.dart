@@ -1,17 +1,18 @@
-/// The reconnect loop, including the three defects of the TypeScript original.
+/// The reconnect loop, including the three defects that could end it for good.
 ///
-/// 1. `src/App.tsx:217-222` caught a failed identity read, set a notice and
-///    `return`ed out of the enclosing async IIFE. The effect's dependencies
-///    could then never change again, so the app sat on "reconnecting" until the
-///    user restarted it.
-/// 2. The `finally` at `src/App.tsx:290-303` wrote `setConnected(false)` and
-///    `setReconnecting(true)` with no check for whether that epoch had been
-///    cancelled, so an epoch unwinding after its successor had started could
-///    pin the UI on "reconnecting" with a live channel behind it.
-/// 3. `src/services/rendezvous.ts` built its URL with `new URL(path, endpoint)`
-///    OUTSIDE the promise, so an invalid endpoint escaped `connect()` as a raw
-///    `TypeError: Invalid URL` and the `.catch()` on the returned promise never
-///    ran at all.
+/// 1. A failed identity read was caught, turned into a notice, and then
+///    returned out of the enclosing async function. Nothing after that could
+///    ever change, so the app sat on "reconnecting" until the user restarted it.
+/// 2. An epoch's teardown wrote `setConnected(false)` and `setReconnecting(true)`
+///    with no check for whether that epoch had been cancelled, so an epoch
+///    unwinding after its successor had started could pin the UI on
+///    "reconnecting" with a live channel behind it.
+/// 3. An invalid endpoint was turned into a URL outside the returned future, so
+///    the raw `TypeError: Invalid URL` escaped `connect()` synchronously and the
+///    `.catch()` on the returned promise never ran at all.
+///
+/// None of them is reachable from the state this loop keeps now, and each has a
+/// test below that fails if it becomes reachable again.
 ///
 /// Nothing here opens a socket or waits on a clock: the socket is
 /// `test/signaling/support/fake_socket.dart` and the delay is
@@ -112,7 +113,7 @@ void main() {
           reason: 'the first socket',
         );
         harness.socket.emitOpen();
-        // A 0.1.x peer sends no session at all.
+        // A peer sends no session at all.
         announceIdentity(harness.socket, legacy: true);
         await pumpUntil(
           () => harness.transport.opened.isNotEmpty,
@@ -129,7 +130,7 @@ void main() {
     test(
       'the initiator is decided by the two public keys, and both sides agree',
       () {
-        // TS: `identity.publicKey < knownPeer.public_key` at `src/App.tsx:223`.
+        // The two public keys, compared — no role is ever exchanged.
         expect(
           isInitiator(
             ownPublicKey: fakeOtherPublicKey,
@@ -174,8 +175,7 @@ void main() {
         );
         harness.socket.emitOpen();
 
-        // An offer that beats the identity frame. TS: `deferred.push(signal)` at
-        // `src/App.tsx:280`.
+        // An offer that beats the identity frame.
         harness.socket.emitJson(<String, Object?>{
           'type': 'relay',
           'payload': <String, Object?>{'kind': 'offer', 'sdp': 'v=0'},
@@ -335,8 +335,9 @@ void main() {
         );
 
         // Epoch 1's socket finally reports a close, long after it was retired. This
-        // is the event the TypeScript `finally` turned into `setConnected(false)`
-        // and `setReconnecting(true)` on a UI that was already live.
+        // is the event an unguarded teardown would turn into
+        // `setConnected(false)` and `setReconnecting(true)` on a UI that was
+        // already live.
         first.emitClose(code: 1006);
         first.emitError(StateError('gecikmeli hata'));
         await pumpUntil(() => harness.sockets.sockets.length >= 2);
@@ -440,9 +441,9 @@ void main() {
         final DriverHarness harness = DriverHarness(endpoint: endpoint);
         addTearDown(harness.dispose);
 
-        // The TypeScript client would have thrown `TypeError: Invalid URL` from
-        // inside `connect()` before the promise existed, and this `await` would
-        // have rethrown it out of `start()`.
+        // A URL built eagerly would throw `TypeError: Invalid URL` from inside
+        // `connect()` before the promise existed, and this `await` would
+        // rethrow it out of `start()`.
         unawaited(harness.driver.start(harness.context));
         await pumpUntil(
           () => harness.delay.requested.length >= 4,
@@ -487,7 +488,7 @@ void main() {
 
       unawaited(harness.driver.start(harness.context));
       // Every attempt is refused. The user is only told from the fourth, which
-      // is the `delay >= 2_800` gate of `src/App.tsx:289`.
+      // is the 2.8 s notice threshold.
       for (int attempt = 0; attempt < 4; attempt += 1) {
         await pumpUntil(
           () => harness.sockets.sockets.length > attempt,
@@ -708,8 +709,8 @@ void main() {
             .single
             .epoch;
 
-        // The socket has not opened, so `relay` would throw inside the client. TS
-        // swallowed that at `src/App.tsx:239-242`; so does this.
+        // The socket has not opened, so `relay` would throw inside the client;
+        // it reports false instead, and the next socket announces anyway.
         expect(epoch.relay(epoch.identity), isFalse);
       },
     );

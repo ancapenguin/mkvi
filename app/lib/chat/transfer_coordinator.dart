@@ -5,30 +5,27 @@
 /// bytes, and the disk. It is also the only place in the application that
 /// creates or destroys a file, and it does so through [FileSink].
 ///
-/// ## The four rules, and where each came from
+/// ## The four rules, and what each one is defending against
 ///
 /// 1. **Progress is monotonic and comes from bytes actually written.**
-///    `peer-transport.ts` emitted `transferred: transfer.received` — the peer's
-///    own running total — and `App.tsx` `trackTransfer` replaced the whole row
-///    from the last event with no ordering guard:
-///    `next[index] = { ...current[index], ...patch }`. Any event that arrived out
-///    of order, or any sink that stored fewer bytes than it was handed, moved the
-///    bar backwards and left a row that could read 90% at 100 bytes. Here the
-///    only numbers that reach [TransferView.transferred] are the ones
-///    [FileSink.write] and [OutgoingFileSource.read] return, and every write
-///    passes through [_advance], which clamps.
-/// 2. **Cancelling works from either side, and is idempotent.** `cancelFile` had
-///    one defect: it removed the send *and* the receive under one id and then
-///    unconditionally sent a `file-cancel`, so cancelling an already-finished
-///    transfer told the peer its file had been cancelled. Here every teardown
-///    path returns `false` for a transfer that is not live, and only a *local*
-///    cancel puts a frame on the wire.
-/// 3. **A refused transfer leaves nothing on disk.** `crates/mkvi_core/src/state.rs`
-///    documents the bug this rule is written against — the cap was checked after
-///    the file was created, so every rejected offer left a 0 byte file. So
-///    [FileSink.open] is called in exactly one method, after every check that can
-///    refuse has refused, and [FileSink.abort] runs on every path that is not
-///    [FileSink.close]. A decline never opens a sink at all.
+///    A progress number taken from the *peer's* running total, patched into a row
+///    with no ordering guard, moves backwards the moment an event arrives out of
+///    order or a sink stores fewer bytes than it was handed — and then the row can
+///    read 90% at 100 bytes. Here the only numbers that reach
+///    [TransferView.transferred] are the ones [FileSink.write] and
+///    [OutgoingFileSource.read] return, and every write passes through
+///    [_advance], which clamps.
+/// 2. **Cancelling works from either side, and is idempotent.** A single cancel
+///    that clears both directions under one id and then unconditionally sends a
+///    `file-cancel` tells the peer its file was cancelled even when the transfer
+///    was already finished. Here every teardown path returns `false` for a
+///    transfer that is not live, and only a *local* cancel puts a frame on the
+///    wire.
+/// 3. **A refused transfer leaves nothing on disk.** The cap must be checked
+///    *before* the file is created, or every rejected offer leaves a 0 byte file
+///    behind. So [FileSink.open] is called in exactly one method, after every
+///    check that can refuse has refused, and [FileSink.abort] runs on every path
+///    that is not [FileSink.close]. A decline never opens a sink at all.
 /// 4. **Two transfers of the same name do not collide.** Nothing in this layer
 ///    keys anything by name: a sink is opened per *transfer id* and returns the
 ///    path it chose, so the non-overwriting rule lives in one place — the
@@ -255,7 +252,7 @@ final class TransferCoordinator {
   // Incoming
   // -----------------------------------------------------------------------
 
-  /// The peer announced a file. TS: the `file-offer` case of `receiveControl`.
+  /// The peer announced a file.
   ///
   /// The size cap is checked **here**, before the offer is admitted, so an
   /// over-cap announcement never becomes a pending transfer at all. That ordering
@@ -298,7 +295,7 @@ final class TransferCoordinator {
     }
   }
 
-  /// The user accepted an announced offer. TS: `acceptFile`.
+  ///
   ///
   /// The one and only [FileSink.open] call in the application.
   Future<DecisionOutcome> accept(String id) async {
@@ -339,7 +336,6 @@ final class TransferCoordinator {
       );
       return const DecisionRefused(PeerProtocol.sinkOpenFailed);
     }
-    // TS: `if (this.receives.get(id) !== transfer) { void sink.abort(id); return; }`.
     // A cancel or a decline that landed while the open was in flight has already
     // torn the transfer down and already scheduled its abort; the file that was
     // just created is that abort's business, so the same scheduled chain is
@@ -363,7 +359,7 @@ final class TransferCoordinator {
     return DecisionAccepted(path);
   }
 
-  /// The user declined an announced offer. TS: `declineFile`.
+  ///
   ///
   /// **Opens nothing.** A declined transfer is refused before a file exists, and
   /// if one somehow does — an accept that raced this call — [FileSink.abort]
@@ -387,7 +383,7 @@ final class TransferCoordinator {
     return DecisionRefused(text);
   }
 
-  /// Takes one binary frame off the wire. TS: `receiveFrame` plus the flush.
+  /// Takes one binary frame off the wire.
   ///
   /// The frame is decoded twice on purpose. `PeerFileReceiver.addFrame` accounts
   /// the payload but deliberately does not hand it back — buffering it there
@@ -404,7 +400,6 @@ final class TransferCoordinator {
     }
     final _Incoming? record = _incoming[decoded.id];
     if (record == null) {
-      // TS: `if (!transfer || !transfer.accepted) throw … unauthorizedFileData`.
       return const FrameRefused(PeerProtocol.unauthorizedFileData);
     }
     final TransferProgress claimed;
@@ -439,7 +434,7 @@ final class TransferCoordinator {
     );
   }
 
-  /// The peer says it is done sending. TS: `finishReceive`.
+  ///
   Future<FrameOutcome> onComplete(String id) async {
     final _Incoming? record = _incoming[id];
     if (record == null || record.tornDown) {
@@ -499,7 +494,7 @@ final class TransferCoordinator {
   // Outgoing
   // -----------------------------------------------------------------------
 
-  /// Offers a file. TS: `sendFile`.
+  ///
   ///
   /// No bytes move until the peer accepts. The size is validated against
   /// [PeerProtocol.maxFileBytes] here, so a 600 MB file never becomes a row.
@@ -549,7 +544,7 @@ final class TransferCoordinator {
     return FileOffered(view);
   }
 
-  /// The peer accepted our offer. TS: the `file-accept` case and `streamFile`.
+  /// The peer accepted our offer.
   Future<void> onAccept(String id) async {
     final _Outgoing? record = _outgoing[id];
     // A second `file-accept` for a live id is a retransmission, not a second
@@ -639,7 +634,7 @@ final class TransferCoordinator {
   // The peer's decisions
   // -----------------------------------------------------------------------
 
-  /// The peer refused our offer. TS: the `file-decline` case.
+  /// The peer refused our offer.
   ///
   /// [reason] is the peer's own text and is shown verbatim, which is the point:
   /// "yerim kalmadı" and "bu tür dosyaları kabul etmiyorum" are different problems
@@ -660,7 +655,7 @@ final class TransferCoordinator {
     return true;
   }
 
-  /// The peer cancelled one of its transfers. TS: the `file-cancel` case.
+  /// The peer cancelled one of its transfers.
   ///
   /// Honoured unconditionally and answered with silence: a `file-cancel` is not
   /// acknowledged, because acknowledging it would race the peer's own teardown.
@@ -695,7 +690,7 @@ final class TransferCoordinator {
     return true;
   }
 
-  /// Stops a transfer from this side. TS: `cancelFile`.
+  ///
   ///
   /// Idempotent: a second call, or a call on a transfer that already finished,
   /// does nothing and says so by returning `false`. Only a *local* cancel puts a
@@ -922,7 +917,7 @@ final class _Incoming {
   /// Set by every teardown, so a write that was already in flight can notice.
   bool tornDown = false;
 
-  /// The per-transfer write chain. TS: `transfer.writes`.
+  ///
   Future<void> writes = Future<void>.value();
 
   /// The abort [TransferCoordinator._teardown] scheduled behind [writes]. Kept

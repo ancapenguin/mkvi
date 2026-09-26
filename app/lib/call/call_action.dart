@@ -6,10 +6,11 @@ import 'package:mkvi/core/protocol/control_message.dart';
 /// The machine has no WebRTC, no capture and no data channel, so it cannot send a
 /// frame or publish a track itself. What it *can* do — and what it does here — is
 /// decide the order, and hand the caller an ordered list. That is the whole
-/// defence against the fourth live bug: `App.tsx:580-581` awaited
-/// `setLocalStream(stream)` and *then* called `acceptCall(call.id)`, publishing
-/// the callee's camera before the user had accepted anything, while the answer
-/// dialog on the same screen promised the opposite.
+/// defence against publishing the callee's camera before the user has accepted
+/// anything: the decision to send `call-accept` and the permission to open a
+/// camera are two entries in one list, so they cannot be reordered by a caller
+/// that awaits the wrong one first, while an answer dialog on the same screen
+/// promises the opposite.
 ///
 /// Sealed, so a `switch` over an action list is exhaustive and a new kind of step
 /// cannot be added without every consumer noticing.

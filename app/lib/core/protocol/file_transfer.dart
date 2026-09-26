@@ -3,7 +3,7 @@ import 'file_frame.dart';
 import 'peer_protocol.dart';
 import 'peer_protocol_exception.dart';
 
-/// A file the peer announced. TS: the `IncomingFile` interface.
+/// A file the peer announced, after validation.
 final class IncomingFile {
   const IncomingFile({
     required this.id,
@@ -41,11 +41,11 @@ final class IncomingFile {
       'IncomingFile(id: $id, name: $name, mime: $mime, size: $size)';
 }
 
-/// Which way a transfer is moving. TS: the `direction` of `file-progress`.
+/// Which way a transfer is moving.
 enum TransferDirection { send, receive }
 
 /// A progress tick. `name` travels with every tick so the UI can label a
-/// transfer it never opened. TS: the `file-progress` event.
+/// transfer it never opened.
 final class TransferProgress {
   const TransferProgress({
     required this.id,
@@ -79,8 +79,7 @@ final class TransferProgress {
       'TransferProgress($direction $id $transferred/$total "$name")';
 }
 
-/// What the receiver decided to do with an announced offer. TS: the `if` at the
-/// top of the `file-offer` case of `receiveControl`.
+/// What the receiver decided to do with an announced offer.
 sealed class FileOfferAdmission {
   const FileOfferAdmission();
 }
@@ -125,17 +124,15 @@ final class FileOfferRefused extends FileOfferAdmission {
 /// The protocol half of an incoming file transfer: which offers are admitted,
 /// when a frame is allowed to land, and how many bytes have arrived.
 ///
-/// TS: the offer branch of `receiveControl`, the frame guard in `receiveFrame`,
-/// and the bookkeeping fields of `PendingReceive`.
-///
 /// Deliberately **not** here: the chunk buffer, the flush batching and the disk
 /// sink. Those need a file handle and a scheduler, they belong to the transport,
 /// and keeping them out is what lets this whole layer be tested with no
-/// hardware — exactly as the TypeScript suite tested it with no data channel.
+/// hardware at all.
 final class PeerFileReceiver {
   final Map<String, _Receive> _receives = <String, _Receive>{};
 
-  /// How many offers are waiting, accepted or not. TS: `this.receives.size`.
+  /// How many offers are waiting, accepted or not. This is the number the
+  /// [PeerProtocol.maxConcurrentReceives] guard is checked against.
   int get pendingCount => _receives.length;
 
   /// The ids currently being received, in arrival order.
@@ -149,22 +146,23 @@ final class PeerFileReceiver {
   /// that is merely announced are refused.
   bool isAccepted(String id) => _receives[id]?.accepted ?? false;
 
-  /// Bytes accepted so far. TS: `transfer.received`.
+  /// Bytes accepted so far, as accounted by this receiver and not as asserted by
+  /// the peer.
   int receivedBytesOf(String id) => _receives[id]?.received ?? 0;
 
   /// Admits an announced file, or refuses it when too many are already pending.
   ///
-  /// TS: the `file-offer` case of `receiveControl`, whose capacity guard sends
-  /// "Çok fazla bekleyen aktarım var." and *does not* store the offer.
+  /// A refused offer is *not* stored: it is answered with
+  /// [PeerProtocol.tooManyPendingTransfers] and forgotten, so a peer cannot fill
+  /// the pending table with offers that will never be accepted.
   ///
-  /// **Deliberately not mirrored:** the original writes the transfer with
-  /// `Map.set`, so a peer that re-announces an id that is already being received
-  /// silently replaces it — resetting `received` to 0 and `accepted` to false
-  /// mid-transfer — and, because `set` overwrites rather than adds, never trips
-  /// the capacity guard. That is a denial-of-service handed to the peer for free:
+  /// **Deliberately not mirrored:** a peer that re-announces an id that is
+  /// already being received must not be able to silently replace it — resetting
+  /// `received` to 0 and `accepted` to false mid-transfer — nor slip past the
+  /// capacity guard by overwriting an existing entry instead of adding one.
+  /// Otherwise this is a denial-of-service handed to the peer for free:
   /// re-announcing the same id forever keeps the slot count at one while the
-  /// bytes on disk keep growing. The frozen 0.1.x line keeps the behaviour
-  /// because its wire peers depend on it; this port refuses instead.
+  /// bytes on disk keep growing. This port refuses the repeat instead.
   FileOfferAdmission offer(FileOfferMessage message) {
     if (_receives.length >= PeerProtocol.maxConcurrentReceives) {
       return FileOfferRefused(message.id, PeerProtocol.tooManyPendingTransfers);
@@ -186,8 +184,10 @@ final class PeerFileReceiver {
 
   /// Marks an announced transfer as accepted so its frames are allowed in.
   ///
-  /// TS: the tail of `acceptFile`, after the sink has been opened. Opening the
-  /// destination is the transport's job; once it succeeds it calls this.
+  /// Opening the destination is the transport's job; once it succeeds it calls
+  /// this. The order matters: the sink is opened *before* the offer is marked
+  /// accepted, so a sink that refuses leaves the transfer unaccepted rather than
+  /// accepted-but-undeliverable.
   void accept(String id) {
     final _Receive? transfer = _receives[id];
     if (transfer == null) {
@@ -199,9 +199,12 @@ final class PeerFileReceiver {
 
   /// Validates and accounts one binary frame.
   ///
-  /// TS: `receiveFrame`. The three rejections and their order are preserved:
-  /// a malformed frame, then a frame for a transfer that is not accepted, then
-  /// a frame that would push the transfer past the size it declared.
+  /// The three rejections and their order are deliberate: a malformed frame,
+  /// then a frame for a transfer that is not accepted, then a frame that would
+  /// push the transfer past the size it declared. A peer that sends data for a
+  /// transfer it was never granted is refused before its bytes are counted, and
+  /// the size check runs last so the accounting is never touched by a frame that
+  /// is going to be refused anyway.
   TransferProgress addFrame(List<int> frame) {
     final FileFrame decoded = FileFrame.decode(frame);
     final _Receive? transfer = _receives[decoded.id];
@@ -222,15 +225,17 @@ final class PeerFileReceiver {
     );
   }
 
-  /// Whether a transfer has received exactly the bytes it declared. TS: the
-  /// `transfer.received !== transfer.size` check in `finishReceive`.
+  /// Whether a transfer has received exactly the bytes it declared. Equality,
+  /// not "at least": a transfer that received *more* than it declared has
+  /// already been refused by [addFrame], so it can only be short.
   bool isComplete(String id) {
     final _Receive? transfer = _receives[id];
     return transfer != null && transfer.received == transfer.file.size;
   }
 
-  /// Forgets a transfer. TS: `dropReceive`, which also deletes the partial file;
-  /// deleting a file is the transport's job, so this only forgets the state.
+  /// Forgets a transfer. Deleting the partial file is the transport's job, so
+  /// this only forgets the state; a caller that drops a transfer and keeps its
+  /// file has leaked a partial download.
   bool drop(String id) => _receives.remove(id) != null;
 }
 

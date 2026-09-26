@@ -1,25 +1,26 @@
-/// The Dart port of `src/services/rendezvous.ts`.
+/// The rendezvous signaling client: one WebSocket, two rooms.
 ///
-/// What the TypeScript client gets from the browser's `WebSocket` global, this
-/// client gets from an injected [SignalingSocketFactory]. That is the whole test
-/// seam: a test hands in a fake, drives open, message, close and error by hand,
-/// and never needs a server, a port or a timer.
+/// What a browser client would get from a global, this client gets from an
+/// injected [SignalingSocketFactory]. That is the whole test seam: a test hands
+/// in a fake, drives open, message, close and error by hand, and never needs a
+/// server, a port or a timer.
 ///
-/// Three behaviours are deliberately different from the TypeScript original, and
-/// each one fixes a defect rather than a style:
+/// ## Three behaviours that are easy to get wrong, and are pinned by the vectors
 ///
-/// 1. A bad endpoint produces a REJECTED FUTURE carrying
-///    [signalingConnectError]. The TypeScript client builds its URL with
-///    `new URL(path, endpoint)` outside the promise, so an invalid endpoint
-///    escapes `connect()` as a raw `TypeError: Invalid URL` and `.catch()` on
-///    the returned promise never runs. `buildSignalingUrl` validates first.
-/// 2. A `wss://` endpoint stays `wss://`. The TypeScript client maps only
-///    `https:` to `wss:`, so a user who pastes the `wss://` address silently
-///    gets a plaintext `ws://` connection.
-/// 3. A `relay` envelope whose payload the Worker would never relay is treated
-///    as malformed and closes with 1003. The TypeScript client forwards whatever
-///    it received, because `onSignal` is typed `unknown` there; here the payload
-///    must become a typed [SignalPayload] or it cannot be handled at all.
+/// 1. **A bad endpoint produces a REJECTED FUTURE** carrying
+///    [signalingConnectError]. Building the URL eagerly — outside the returned
+///    future — lets a `TypeError: Invalid URL` escape `connect()` as a
+///    synchronous throw, so a `.catch()` on the returned future never runs at all
+///    and the caller hangs instead of reporting. [buildSignalingUrl] validates
+///    first, inside the async path.
+/// 2. **A `wss://` endpoint stays `wss://`.** Mapping only `https:` to `wss:`
+///    means a user who pastes the `wss://` address silently gets a plaintext
+///    `ws://` connection — identity signatures and SDP in the clear, with
+///    nothing to indicate it. The `url` cases in `vectors/wire-v1.json` pin this.
+/// 3. **A `relay` envelope the Worker would never relay is treated as
+///    malformed** and closes with 1003. Forwarding an arbitrary untyped payload
+///    means relaying something that cannot be rebuilt into a typed object, so
+///    the client would hand its own transport something it cannot handle.
 library;
 
 import 'dart:async';

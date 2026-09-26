@@ -5,9 +5,11 @@
 /// only through the interfaces in `media_seam.dart`, so `test/media` runs the
 /// whole call ladder with no hardware.
 ///
-/// The TypeScript original had none of this: `ChatCallWorkspace.tsx` called
-/// `navigator.mediaDevices` itself, `App.tsx` called the senders itself, and
-/// nothing in between owned a track. [MediaController] is that missing middle.
+/// The layer exists because a camera API plus a set of senders, with nothing in
+/// between owning a track, is not enough: somebody has to hold the tracks, or
+/// they leak, and somebody has to decide that a video request which cannot be
+/// honoured is *reported* rather than downgraded. [MediaController] is that
+/// somebody.
 ///
 /// ## The order the owner of a connection must run things in
 ///
@@ -23,9 +25,9 @@
 /// | call ended | `stop()` — detach all three senders and stop every track created |
 /// | connection closed | `dispose()` |
 ///
-/// `stop()` and `dispose()` are the answer to the leak the old build had: a
-/// camera left on after a call. There is one track ledger, and every track the
-/// controller creates goes into it before anything can fail.
+/// `stop()` and `dispose()` are the answer to a camera left on after the call:
+/// one track ledger, and every track the controller creates goes into it before
+/// anything can fail.
 ///
 /// ## Upstream defects, and where they are handled
 ///

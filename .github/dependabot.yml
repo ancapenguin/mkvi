@@ -1,45 +1,48 @@
-# Dependabot, iki lockfile'ı ve iki Rust yüzeyini ayrı izler.
-# Kuyruk tek bakımcı tarafından yönetildiği için küçük tutulur.
+# Dependabot, üç lockfile'ı ve üç Rust yüzeyini ayrı izler.
+# Kuyruk tek bakımcı tarafından yönetildiği için kök tutulur.
+#
+# 2026-09-26: 0.1.x Tauri hattı emekliye ayrıldı. Kök `package.json` (Vite/React)
+# ve `src-tauri/Cargo.toml` gitti, o iki girdi kaldırıldı. Worker'ın npm
+# girdisi ve iki crate'in cargo girdileri kaldı.
 version: 2
 updates:
-  # --- JavaScript: uygulama (kök package.json / package-lock.json) ---
-  - package-ecosystem: npm
-    directory: "/"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-
   # --- JavaScript: sinyalleşme Worker'ı (cloudflare/package.json) ---
-  # Ayrı bir lockfile: kökteki vitest/typescript sürümleriyle aynı değil.
+  # Depodaki TEK npm projesi. Ayrı lockfile.
   - package-ecosystem: npm
     directory: "/cloudflare"
     schedule:
       interval: weekly
     open-pull-requests-limit: 3
 
-  # --- Rust: Tauri adaptörü (src-tauri/Cargo.toml) ---
-  - package-ecosystem: cargo
-    directory: "/src-tauri"
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-
   # --- Rust: çekirdek (crates/mkvi_core/Cargo.toml) ---
   # mkvi_core BİR WORKSPACE ÜYESİ DEĞİL; kendi paketi ve kendi Cargo.lock
-  # dosyası var. Bu yüzden src-tauri'ın girdisi onu kapsamaz ve ayrı bir
-  # dependabot girdisi şarttır (bkz. crates/mkvi_core/Cargo.toml başındaki
-  # "Deliberately its own package, not a workspace member" notu).
-  # Dart/Flutter tarafı (app/pubspec.yaml) dependabot tarafından izlenmez;
-  # pub.dev paketleri için `dart` ekosistem ekosistemi kullanılamaz.
+  # dosyası var. Bu yüzden ayrı bir dependabot girdisi şart (bkz.
+  # crates/mkvi_core/Cargo.toml başındaki "Deliberately its own package"
+  # notu).
   - package-ecosystem: cargo
     directory: "/crates/mkvi_core"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
 
+  # --- Rust: Dart köprüsü (crates/mkvi_bridge/Cargo.toml) ---
+  # `flutter_rust_bridge` sürümü üç yerde birebir eşleşmek zorunda
+  # (Cargo.toml, dart/pubspec.yaml ve üretilmiş `frb_generated.dart`'ın
+  # `codegenVersion` alanı). Güncelleme bu üçünü birlikte getirmeli.
+  - package-ecosystem: cargo
+    directory: "/crates/mkvi_bridge"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  # --- Dart/Flutter (app/pubspec.yaml) ---
+  # NOT: Dependabot Dart ekosistemini desteklemez. `app/pubspec.yaml` elle
+  # güncellenir ve `flutter pub outdated` ile izlenir. Bu bir eksiklik, çözümü
+  # yok: pub.dev için bir dependabot ekosistemi bulunmuyor.
+  #
   # --- GitHub Actions ---
-  # publish-update.yml yayımlama yapıyor; güncellemeler yayımlama hattını
-  # etkileyebileceği için gözden geçirme gerekir.
+  # `release.yml` yayınlama yapıyor; güncellemeler yayın hattını etkileyebileceği
+  # için gözden geçirme gerekir.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

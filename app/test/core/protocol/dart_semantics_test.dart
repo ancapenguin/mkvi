@@ -1,8 +1,9 @@
-// Cases the TypeScript suite could not have: places where Dart and JavaScript
-// genuinely disagree, and therefore where a naive transliteration would either
-// crash or quietly accept more than the Tauri build does.
+// Cases a transliteration of the protocol could not have: places where Dart and
+// JavaScript genuinely disagree, and therefore where copying the logic across
+// would either crash or quietly accept more than it should.
 //
-// Every test here is an addition. Nothing in this file replaces a ported test.
+// Every test here is an addition to the protocol suite; nothing here replaces a
+// case that already existed.
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -19,7 +20,7 @@ String repeat(String unit, int count) =>
 
 String encode(Map<String, Object?> value) => jsonEncode(value);
 
-/// The matcher the TypeScript suite expressed as `expect(...).toThrow()`.
+/// Every rejected shape raises a [PeerProtocolException].
 final Matcher throwsProtocolException = throwsA(isA<PeerProtocolException>());
 
 final Matcher throwsMessageTooLarge = throwsA(
@@ -145,8 +146,9 @@ void main() {
     // the size budget.
     test('does not crash on a lone surrogate or an invalid code point', () {
       expect(() => safeDisplayName('Merhaba$loneSurrogate'), returnsNormally);
-      // The port maps it to a space, which the surrounding trim then removes.
-      // The TypeScript original keeps it; see the deviation note in the report.
+      // A lone surrogate maps to a space, which the surrounding trim then
+      // removes. Keeping it would put a code point that strict UTF-8 consumers
+      // cannot encode into a name the peer will display.
       expect(safeDisplayName('Merhaba$loneSurrogate'), 'Merhaba');
       expect(safeDisplayName(loneSurrogate), '');
 
@@ -341,9 +343,10 @@ void main() {
   });
 
   group('absent versus explicit null', () {
-    // Not in the TypeScript suite, but `null` and "key not present" are the same
-    // value in Dart and different values in JavaScript, so the port has to
-    // distinguish them explicitly to stay compatible.
+    // `null` and "key not present" are the same value in Dart and different
+    // values in JavaScript, so the parser has to distinguish them explicitly.
+    // Without `containsKey` the port would quietly accept frames a peer treats
+    // as malformed, and the two ends would disagree about what a valid frame is.
     test(
       'rejects an explicit null where the original expects an absent key',
       () {
@@ -386,8 +389,8 @@ void main() {
   });
 
   group('wire round trip', () {
-    // Not in the TypeScript suite, but the port adds an encoder, so every one of
-    // the twelve variants has to survive encode-then-parse unchanged.
+    // The layer has an encoder as well as a parser, so every one of the twelve
+    // variants has to survive encode-then-parse unchanged.
     test('round-trips every control type through encode and parse', () {
       final List<PeerControlMessage> messages = <PeerControlMessage>[
         ChatMessage(id: id, text: 'merhaba', sentAt: 1),
@@ -491,11 +494,11 @@ void main() {
   });
 
   group('reason sanitising is deliberately asymmetric', () {
-    // Not in the TypeScript suite, and the port deliberately diverges here.
-    // src/services/peer-transport.ts:546 slices a file-decline/file-cancel reason
-    // raw while :547 runs a call-decline reason through safeReason. A file
-    // decline is rendered in a transfer row, so 0.1.x puts raw newlines, tabs
-    // and leading spaces into the interface. This port scrubs all three.
+    // A file decline and a call decline used to be handled by two different
+    // rules one line apart: the call decline was scrubbed and the file decline
+    // was only sliced. A file decline reason is rendered in a transfer row, so
+    // that put raw newlines, tabs and bidi overrides into the interface. One
+    // rule for all three reason-bearing frames; the length cap is unchanged.
     test('scrubs a file decline reason too, unlike 0.1.x', () {
       final String bidi = String.fromCharCode(0x202e);
       // Two whitespace runs, two control characters and an over-long tail.
@@ -536,9 +539,9 @@ void main() {
   });
 
   group('ECMAScript whitespace set', () {
-    // Not in the TypeScript suite, but `dart:core`'s `String.trim` uses a
-    // different whitespace definition than JavaScript's, so the port implements
-    // the ECMAScript set itself. This pins every member of that set.
+    // `dart:core`'s `String.trim` uses a different whitespace definition than
+    // the one the wire format's original encoding used, so the sanitisers
+    // implement that set themselves. This pins every member of the set.
     test('treats every ECMAScript whitespace as a single space', () {
       const List<int> ecmaWhitespace = <int>[
         0x09, 0x0a, 0x0b, 0x0c, 0x0d, // tab, LF, VT, FF, CR
@@ -600,9 +603,10 @@ void main() {
   });
 
   group('media type anchoring', () {
-    // Not in the TypeScript suite. The original validated with a regular
-    // expression whose `^`/`$` do not match around a trailing newline, and the
-    // port replaced the expression with a scanner; this pins the two together.
+    // The obvious way to validate a media type is a regular expression, but
+    // `^`/`$` do not match around a trailing newline in most engines — so
+    // "text/plain\n" would pass. The sanitiser uses a scanner instead, and this
+    // pins the two together so they cannot drift.
     test('does not accept a media type with anything around it', () {
       for (final String candidate in <String>[
         'text/plain\n',

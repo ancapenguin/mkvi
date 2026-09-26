@@ -42,18 +42,20 @@ const String prehashedKey =
 
 /// The same 42 bytes with minisign's retired algorithm tag, `0x45 0x64` - "Ed".
 ///
-/// This is the shape of the key `src-tauri/tauri.conf.json:41` actually holds,
-/// and a strict verifier refuses every signature such a key can produce.
+/// This is the shape the key the 0.1.x line shipped had, and a strict verifier
+/// refuses every signature such a key can produce.
 const String legacyKey =
     'RWRaWlpaWlpaWhAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4v';
 
-/// The exact value from `src-tauri/tauri.conf.json:41`, verified base64 and
-/// carried here so the legacy-key test is about the real configuration rather
-/// than about a fixture that merely looks like it.
+/// The exact key value the retired 0.1.x line was built with, verified base64
+/// and carried here so the legacy-key test is about a real configuration rather
+/// than about a fixture that merely looks like one.
 ///
 /// Decoded it is a whole `minisign.pub` file whose payload begins `Ed`, not
-/// `ED` - the retired algorithm.
-const String tauriConfiguredKey =
+/// `ED` - the retired algorithm. It is kept as a *fixture*, not as a
+/// configuration: nothing may be built with it, and the key a real release is
+/// signed with has to be minted fresh with `minisign -W`.
+const String retiredLegacyKey =
     'dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5Q0E3QjRBMEFFQTU2'
     'NDEKUldSQlZ1b0tTbnZLaWNOZ3BwRUF3RWsvVGV0V1RiMGZsR2ltak9LcGVFYkRLY2dNdVdR'
     'akJzWGYK';
@@ -62,12 +64,9 @@ const String tauriConfiguredKey =
 /// Never decoded here either.
 const String artifactSignature = 'c2lnbmF0dXJlLWJsb2NrLWJ5dGVz';
 
-/// The endpoint the Tauri build shipped with. It answers 404, and it is named
-/// here so the tests that use it say so out loud.
-const String deadFeedUrl =
-    'https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/latest.json';
-
-/// A feed URL a working deployment would use.
+/// A feed address for tests that only need a host. The production address is
+/// `releaseFeedUrlText` in the library, and the tests that care about the
+/// production address use that constant rather than a copy of it here.
 const String liveFeedUrl = 'https://updates.example.invalid/mkvi/latest.json';
 
 /// The artefact the release key signed. Long enough to cross more than one
@@ -280,8 +279,11 @@ final class FakeSignatureVerifier implements SignatureVerifier {
     final List<int>? actual = files.contentAt(artifactPath);
     if (actual == null) return const ArtifactSignatureRejected();
     // The length the client claims has to be the length on disk, or the client
-    // has verified something other than what it wrote.
-    if (actual.length != byteLength) return const ArtifactSignatureRejected();
+    // has verified something other than what it wrote. The Rust bridge is
+    // specified to answer this before the read
+    // (`ArtifactSizeMismatch`, `update_verifier.dart`), so the fake does too:
+    // a truncated file is not a forged signature.
+    if (actual.length != byteLength) return const ArtifactSizeMismatch();
     return digest64(actual) == signedDigest
         ? const ArtifactSignatureValid()
         : const ArtifactSignatureRejected();
@@ -413,7 +415,7 @@ final class FakeFileStore implements UpdateFileStore {
 /// An [UpdateClient] with every seam faked, plus the handles a test pokes at.
 final class UpdateHarness {
   UpdateHarness({
-    String feedUrl = liveFeedUrl,
+    String feedUrl = releaseFeedUrlText,
     String publicKey = prehashedKey,
     String version = currentVersion,
     List<int>? pinnedManifest,

@@ -1,16 +1,23 @@
 /// Identifier shapes that travel on the signaling wire.
 ///
-/// Two of them exist, and both were once wrong in production:
+/// Two of them exist, and both were once wrong in production — these are the
+/// two defects the shared vector contract was written to catch:
 ///
 /// * The 43 character base64url opaque id (`pair`, `device`, `session`). 32
 ///   random bytes, base64url, padding stripped. It is an unguessable bearer
 ///   capability, not a user identifier, and it is also a URL query value - which
-///   is why it must never be produced in the standard alphabet.
+///   is why it must never be produced in the standard alphabet. The Rust core
+///   once sent identity material in *standard* base64 (`+`, `/`), which the
+///   Worker rejected: roughly 93% of pairings died silently at identity
+///   exchange, and nothing said why.
 /// * The 32 character lowercase hex transfer id used by the peer transport's
-///   control messages. `crypto.randomUUID()` was used here once and produced a
-///   hyphenated 36 character string, which the receiving `parseControl` rejected:
-///   not a single message ever arrived. See the `transferId` cases in
-///   `vectors/wire-v1.json`, which pin both the accepted and the rejected form.
+///   control messages. A hyphenated 36 character UUID was used here once, and the
+///   receiving parser rejected every frame it appeared in: not a single message
+///   ever arrived.
+///
+/// See the `opaqueIdShape`, `transferIdShape` and `transferId` cases in
+/// `vectors/wire-v1.json`, which pin both the accepted and the rejected form of
+/// each — so neither alphabet can be changed by accident again.
 library;
 
 import 'dart:convert';
@@ -31,13 +38,12 @@ List<int> _randomBytes(int length, Random? random) {
 }
 
 /// 32 random bytes as unpadded base64url: 43 characters, `pair`/`device`/
-/// `session`. Mirrors `createRendezvousId` in `src/App.tsx`.
+/// `session`.
 String createOpaqueId({Random? random}) =>
     base64Url.encode(_randomBytes(_opaqueIdByteLength, random)).replaceAll('=', '');
 
-/// 16 random bytes as lowercase hex: 32 characters. Mirrors `randomTransferId`
-/// in `src/services/peer-transport.ts`, which is the fix for the `randomUUID()`
-/// regression described in this file's header.
+/// 16 random bytes as lowercase hex: 32 characters. This is the fix for the
+/// UUID regression described in this file's header.
 String createTransferId({Random? random}) {
   final StringBuffer buffer = StringBuffer();
   for (final int byte in _randomBytes(_transferIdByteLength, random)) {

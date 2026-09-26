@@ -1,8 +1,8 @@
 /// The one object the UI holds: the current [SetupState], the peer's names, and
 /// the reconnect loop that backs them.
 ///
-/// Everything the TypeScript `App` component held in a dozen `useState` calls
-/// lives here as a value, and every write goes through a method whose guard is
+/// Everything a component-tree of mutable widget state would have held lives
+/// here as a value, and every write goes through a method whose guard is
 /// testable. The two production defects are pinned by the shape of this class:
 ///
 /// * Pairing is reachable from [openPairing] and from nowhere else. There is no
@@ -76,8 +76,8 @@ final class SessionController {
   String _endpoint = '';
   bool _disposed = false;
 
-  /// TS: the `bootstrapping` flag at `src/App.tsx:104`, as a value rather than
-  /// a fourth rendering branch.
+  /// The current startup state, as a value rather than a fourth rendering
+  /// branch.
   SetupState get state => _state;
 
   /// The state stream. A UI rebuilds from this and never from a null check.
@@ -149,7 +149,7 @@ final class SessionController {
 
   /// Takes a stored peer as the current one, reading its annotation.
   ///
-  /// The one-time migration of the unscoped 0.1.x key happens here and only
+  /// The one-time migration of the unscoped legacy key happens here and only
   /// for the peer that was actually restored, which is what keeps a note about
   /// one person from being shown for the next: [PeerAliasStore.read] is a pure
   /// function of one public key and has no legacy fallback.
@@ -165,22 +165,19 @@ final class SessionController {
 
   /// The pairing screen, on purpose. The ONLY producer of
   /// [SetupState.needsPairing] in the whole application.
-  ///
-  /// TS: `onOpenPairing` at `src/App.tsx:559`, which set `showPairing` and, for
-  /// the workspace, a `manualPairingActive` flag that gated the reconnect
-  /// effect. Both are here, and the loop is actually stopped.
   Future<void> openPairing() async {
     if (_state.showsPairingScreen) return;
     // The state changes FIRST. `_startLoop` bails out on a pairing screen, and
     // a restore that is still in flight can therefore never start a loop behind
-    // the pairing screen - which is what TS's `manualPairingActive` flag was
-    // for, and it is enforced here instead of by a caller remembering to set it.
+    // the pairing screen. That is what a separate "the user asked for pairing"
+    // flag used to be for, and here it is enforced by the state itself instead
+    // of by a caller remembering to set a second flag.
     _transition(const SetupState.needsPairing());
     await _driver.stop();
   }
 
-  /// Backs out of a user-initiated pairing and returns to the saved pair.
-  /// TS: the "← Sohbete dön" button at `src/App.tsx:603`.
+  /// Backs out of a user-initiated pairing and returns to the saved pair. The
+  /// "← Sohbete dön" button.
   Future<void> cancelPairing() async {
     if (_state is! SetupNeedsPairing) return;
     final KnownPeer? peer = _peer;
@@ -196,10 +193,9 @@ final class SessionController {
   /// Adopts a peer that a finished pairing produced.
   ///
   /// [freshAnnouncedName] is whatever the data channel has delivered, and it is
-  /// very often still null: `src/App.tsx:438` wrote
-  /// `display_name: peerAnnouncedName || defaultPeerName` and therefore replaced
-  /// a name the user had been looking at for months with `"Kişi"` whenever the
-  /// channel came up before the peer's `profile` frame did.
+  /// very often still null: the peer's `profile` frame can arrive after pairing
+  /// completes. Substituting the placeholder for a missing name here would
+  /// replace a name the user had been looking at for months with `"Kişi"`.
   Future<bool> completePairing({
     required String publicKey,
     required String discoveryId,
@@ -219,9 +215,9 @@ final class SessionController {
     try {
       await _peerStore.writePeer(stored);
     } on Object {
-      // TS: `src/App.tsx:453` set a notice and left the state alone. Nothing
-      // here is adopted before the write succeeds, so a failed write cannot
-      // leave the app showing a peer that is not on disk.
+      // Nothing is adopted before the write succeeds, so a failed write cannot
+      // leave the app showing a peer that is not on disk — which would survive
+      // the restart and then be gone.
       return false;
     }
     if (_disposed) return true;
@@ -248,8 +244,7 @@ final class SessionController {
   // Channel
   // -----------------------------------------------------------------------
 
-  /// Announces that the data channel opened or closed. TS: the `channel` branch
-  /// of `handlePeerEvent`, `src/App.tsx:345-353`.
+  /// Announces that the data channel opened or closed.
   ///
   /// It can only ever move between [SetupState.connected] and
   /// [SetupState.reconnecting], and only while a peer is stored and no pairing is
@@ -266,8 +261,8 @@ final class SessionController {
   // Names
   // -----------------------------------------------------------------------
 
-  /// The peer announced a name for itself over the data channel. TS:
-  /// `src/App.tsx:354-362`, which persisted it and never touched the alias.
+  /// The peer announced a name for itself over the data channel. Persisted, and
+  /// it never touches the local annotation — the two are separate slots.
   ///
   /// The store write is best effort and is never allowed to fail the update: a
   /// name that arrived over an open channel is true whether or not it reached
@@ -287,8 +282,7 @@ final class SessionController {
     }
   }
 
-  /// Sets this device's local note about the peer. TS: `renamePeer` at
-  /// `src/App.tsx:524-532`, scoped by public key.
+  /// Sets this device's local note about the peer, scoped by public key.
   ///
   /// This never touches [names].displayName and never writes into the stored
   /// record. An empty value removes the note.
@@ -314,8 +308,8 @@ final class SessionController {
   // Connection settings
   // -----------------------------------------------------------------------
 
-  /// Saves the endpoint and the ICE text together, TS: `saveEndpoint` at
-  /// `src/App.tsx:322-331`. A blank endpoint is refused rather than stored.
+  /// Saves the endpoint and the ICE text together. A blank endpoint is refused
+  /// rather than stored.
   bool saveConnectionSettings({
     required String endpoint,
     required String iceText,
@@ -332,9 +326,8 @@ final class SessionController {
   Future<void> restartDiscovery() async {
     final KnownPeer? peer = _peer;
     if (peer == null || _state.showsPairingScreen) return;
-    // TS: the effect dependencies at `src/App.tsx:320` deliberately included
-    // the endpoint and the ICE text, because changing either must produce a
-    // NEW session id rather than reuse the sockets of the old candidates.
+    // Changing either the endpoint or the ICE text must produce a NEW session
+    // id rather than reuse the sockets of the old candidates.
     await _startLoop();
   }
 

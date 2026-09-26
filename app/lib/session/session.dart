@@ -5,21 +5,17 @@
 ///
 /// The three production defects this library exists to make impossible:
 ///
-/// * A failed peer read rendered the FIRST-RUN pairing screen, because
-///   `src/App.tsx` gated that screen on `knownPeer === null` and a rejected
-///   `loadKnownPeer()` also left it null. [SetupState] splits the two, and
-///   [SetupState.showsPairingScreen] is the only thing that may answer the
-///   question.
-/// * A transient identity-read failure ended the reconnect loop forever
-///   (`return` out of the enclosing async IIFE at `src/App.tsx:222`), and a
-///   stale epoch's `finally` wrote `setConnected(false)` / `setReconnecting(true)`
-///   over a live successor's state. [ReconnectDriver] guards both structurally.
-/// * A local annotation outranked the name the peer announced for itself
-///   (`src/App.tsx:119`) and, when it happened to equal it, silently removed
-///   both the announced-name line and the "remove annotation" button
-///   (`src/components/ChatCallWorkspace.tsx:490`). [PeerNameView] has two
-///   slots and answers the UI's question about the annotation, not about the
-///   two names' equality.
+/// * A failed peer read rendered the FIRST-RUN pairing screen, because a
+///   rejected read and "no peer yet" left the same null behind.
+///   [SetupState] splits the two, and [SetupState.showsPairingScreen] is the only
+///   thing that may answer the question.
+/// * A transient identity-read failure ended the reconnect loop forever, and a
+///   stale epoch's teardown wrote "disconnected" / "reconnecting" over a live
+///   successor's state. [ReconnectDriver] guards both structurally.
+/// * A local annotation outranked the name the peer announced for itself, and
+///   when it happened to equal it, silently removed both the announced-name line
+///   and the "remove annotation" button. [PeerNameView] has two slots and answers
+///   the UI's question about the annotation, not about the two names' equality.
 library;
 
 export 'identity.dart';

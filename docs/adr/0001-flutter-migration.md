@@ -1,8 +1,15 @@
 # 0001 — Arayüz ve kabuk React + Tauri'dan Flutter'a taşınıyor
 
 **Tarih:** 2026-09-26
-**Durum:** Kabul (koşullu: `spike/` geçişi doğrular)
-**Etki:** `app/`, `crates/mkvi_core`, `crates/mkvi_bridge`, `docs/adr/`, donmuş `0.1.x` hat
+**Durum:** **Kabul.** Kararın kendisi değişmedi ve değişmeyecek; **koşulu henüz
+doğrulanmadı.** Koşulun 2026-09-26 itibarıyla durumu için aşağıdaki
+*"Koşulun durumu"* bölümüne bakın.
+**Etki:** `app/`, `crates/mkvi_core`, `crates/mkvi_bridge`, `docs/adr/`, emekliye
+ayrılmış `0.1.x` Tauri hattı
+
+> Bu bir **karar kaydıdır**, kullanım kılavuzu değildir. Yazıldığı gün doğru olan
+> betimlemeleri tarihsel olarak korur; bugünün durumu için `README.md`,
+> `ARCHITECTURE.md` ve `ROADMAP.md`'ye bakın.
 
 ## Bağlam
 
@@ -33,11 +40,11 @@ TypeScript Worker.
 
 ```
 app/                    Flutter uygulaması (Windows → macOS/Linux → Android)
-crates/mkvi_core/       Tauri'dan bağımsız çekirdek: Ed25519, keyring, şifreli SQLite, dosya yazımı
+crates/mkvi_core/       Arayüzden bağımsız çekirdek: Ed25519, keyring, şifreli SQLite, dosya yazımı
 crates/mkvi_bridge/     flutter_rust_bridge yüzeyi (tek crate, iki platform)
 cloudflare/             Sinyalleşme sunucusu — dokunulmaz
 design/tokens.json      Tasarımın tek kaynağı (kontrast testiyle kilitli)
-src/, src-tauri/        0.1.x donmuş hat; Flutter 0.2.0 yayınlandıktan sonra silinir
+src/, src-tauri/        0.1.x donmuş hat (bugün: emekli); 0.2.0 yayımlandıktan sonra silinir
 ```
 
 ## Kanıt
@@ -45,7 +52,8 @@ src/, src-tauri/        0.1.x donmuş hat; Flutter 0.2.0 yayınlandıktan sonra 
 **Flutter lehine:**
 
 - `flutter build windows --release` bu depoda **143 saniyede** `mkvi_spike.exe` üretti;
-  `libwebrtc.m150.7871.02` otomatik indi. Bkz. `spike/README.md`.
+  `libwebrtc.m150.7871.02` otomatik indi. Bkz. `docs/manual-test.md` (gün 1-2;
+  bu kayıt `spike/README.md`'den kurtarılmıştır, o dosya 2026-09-26'da silindi).
 - WebView2 izin duvarı **tamamen ortadan kalkıyor**: `flutter_webrtc` tarayıcı değil,
   native C++ plugin (MF/WASAPI/DXGI). Yani 1 numaralı kök neden taşımayla kendiliğinden
   çözülüyor — elle COM yazmaya gerek kalmıyor.
@@ -87,22 +95,107 @@ izin sorunuunun tamamının bitmesi; Tauri'de iki kez ödenen "izin katmanı" ve
 güncelleme" karmaşasının tek tasarımda toplanması.
 
 **Kaybedilen:** Çalışan tek ürün (0.1.x) bir süre daha yan yolda duracak. Bu yüzden
-0.1.x **donduruldu, silinmedi** — kuzen onu kullanmaya devam ediyor. Silme koşulu
-ADR'nin sonunda bağlıdır.
+0.1.x **donduruldu, silinmedi.** Silme koşulu ADR'nin sonunda bağlıdır.
 
-**Dondurulan 0.1.x hattı ne zaman silinir:** Flutter 0.2.0 yayınlandıktan ve iki
+> **Güncelleme (2026-09-26):** 0.1.x artık yalnız "dondurulmuş" değil,
+> **emekliye ayrılmış** bir hat olarak anılıyor. Üretim düzeltmesi ve yayın
+> almayacak.
+
+**Emekti 0.1.x hattı ne zaman silinir:** Flutter 0.2.0 yayınlandıktan ve iki
 cihazda gerçek arama + dosya aktarımı geçtikten **sonra**, tek commit'te. Bekleme
 süresince `src/` dosyaları Dart portunun **spesifikasyon kaynağı** olarak duruyor
 (`src/services/peer-transport.ts` taşınacak mimarinin şeması).
 
+> ⚠️ **Bu iki koşul birbirine bağlıdır ve sıra önemlidir.** "Gerçek arama + dosya
+> aktarımı geçti" ifadesi, aşağıdaki koşulun **düz port** sonucuna bağlıdır;
+> yani 0.1.x hattının silinmesi kararın koşulunun doğrulanmasına bağlıydı.
+>
+> **Kayıt (2026-09-26):** koşul doğrulanmadıği hâlde 0.1.x hattı
+> (`src/`, `src-tauri/`, kök Vite/TypeScript yapılandırması, `spike/`) **silindi.**
+> Bu, "spesifikasyon kaynağı" gerekçesinin artık taşınmadığı anlamına gelir; o
+> hatta ait her bilginin nereye yazıldığı `docs/legacy-tauri-line.md`'de
+> madde madde kayıtlıdır. **Kararın koşulu bundan etkilenmez** — koşul
+> `docs/manual-test.md` ile ölçülecek ve gerektiğinde vendor fork ya da NO-GO
+> sonucu doğuracaktır.
+
 ## Tersine çevirme koşulu
 
-Bu karar **koşullu**. `spike/README.md` içindeki 7 günlük protokol ve **karar
-kuralı** (önceden sabitlendi, sonradan oynanmayacak) şunları arıyor: `rollback`
-çalışıyor mu, SDP parmak izi `getStats` ile aynı mı, 18 ekran paylaşımı senaryosundan
-kaçı geçiyor, dosya aktarımı Tauri'ye göre ne durumda, soak'ta çökme var mı.
+Bu karar **koşullu** kabul edildi. Karar kuralı, denemeden **önce**
+`spike/README.md` içinde sabitlendi ve sonradan oynanmayacak. O dosya
+2026-09-26'da silindi; **kuralın ve beş sorunun bugün yaşayan kopyası
+`docs/manual-test.md`'dir** ve kelimesi kelimesine korunmuştur.
 
-`rollback` bozuksa veya sessiz ekran paylaşımı başarısızlığı tespit edilemiyorsa
-→ `flutter_webrtc` **vendor** edilir (path dependency + C++ yaması).
-Soak'ta çökme varsa veya aktarım %30 geriliyorsa → **Windows'ta NO-GO**, Tauri 0.1.x
-dondurulmuş hat olarak kalır ve Android atlanır.
+> **Karar kuralı (aynen):**
+>
+> - `rollback` çalışıyor mu, SDP parmak izi `getStats` ile aynı mı ve soak'ta
+>   çökme var mı — **üçü de olumlu** **ve** 3. soruda **≥8/10 ekran paylaşımı
+>   senaryosu** geçiyorsa → **Düz port.**
+> - `rollback` bozuksa **ya da** sessiz ekran paylaşımı başarısızlığı
+>   (`flutter-webrtc` #2137) tespit edilemiyorsa **ya da** 10 senaryodan
+>   **4'ten fazlası** başarısızsa → **Vendor fork**: `flutter_webrtc` path
+>   dependency olur, `flutter_screen_capture.cc` içinde `Start()` dönüş değeri
+>   yayınlanır, `OnError` iletilir, HDR için WGC arka ucu eklenir.
+> - Soak'ta çökme varsa **ya da** dosya aktarımı Tauri'ye göre **%30** geriliyorsa
+>   → **Windows'ta NO-GO.** Tauri 0.1.x donmuş hat olarak kalır ve Android
+>   atlanır.
+
+> **Not (2026-09-26):** son dal artık **güncel değil** — 0.1.x hattı silindi.
+> Bu dal bugün yalnızca şunu demektir: *Windows'ta Flutter'a geçme, Android fazını
+> atla ve mimariyi yeniden düşün.* Kararın yönü, eşikleri ve ölçütleri aynen
+> geçerlidir. Aynı not `docs/manual-test.md`'de de durur.
+
+### Düzeltme (2026-09-26): "18 senaryo" değil, **10 senaryo**
+
+Bu ADR'nin önceki hâli koşulu *"18 ekran paylaşımı senaryosundan kaçı geçiyor"*
+diye yazıyordu. **Bu yanlıştı ve düzeltildi.** Karar kuralı **10** senaryo üzerinden
+yazılmıştı: eşik `≥8/10`, vendor fork eşiği "4'ten fazlası başarısız".
+
+Doğrulama ve gerekçe:
+
+- Karar tablosu `spike/README.md:130` ve `:136-140` — *"10 ekran paylaşımı
+  senaryosundan kaçı geçti, kaçı sessizce başarısızlıktı?"*, *"3'te ≥8/10
+  senaryo geçiyorsa"* ve *"4'ten fazla senaryo başarısızsa"*. Bu satırlar bugün
+  `docs/manual-test.md` "Gün 7 · Karar" bölümünde aynen duruyor.
+- **18 nereden geldi:** `spike/README.md`'nin gün 3 ve gün 4 satırları protokolü
+  18 senaryoya kadar genişletmişti. Yani **18, kararın girdisi değil, protokolün
+  son hâlidir**; karar kuralı yazıldığında ölçüt 10 idi ve ölçülecek olan da
+  buydu.
+- **Neden 10 sayısı korunuyor:** Karar kuralı denemeden **önce** sabitlendi ve
+  bunu değiştirmenin kendisi kararı geçersiz kılardı — deneme sonucu görüldükten
+  sonra eşiği gevşetmek, eşiği hiç koymamakla aynı şeydir. 18'e yükseltmek de
+  aynı hatayı taşır: sonradan oynanan bir eşik, eşik değildir. 10 senaryo
+  ayrıca "geçerse" eşiğinin (≥8) anlamlı olduğu tek sayıdır; 18'de ≥8/18
+  eşiği ancak ciddi bir başarısızlıkta anlamlı hale gelirdi.
+
+**Sonuç:** koşulun metni 18 → **10** düzeltildi. Kararın kendisi, kanıtı ve
+sonuçları değişmedi.
+
+## Koşulun durumu (2026-09-26)
+
+**Koşul hâlâ doğrulanmadı.** `spike/` protokolü bir kez de tam olarak
+yürütülmedi; yani "düz port" / "vendor fork" / "NO-GO" üçünden hangisinin doğru
+olduğu **bilinmiyor.** Bu, kararın yanlış olduğu anlamına gelmez — karar,
+koşulu yerine getirilene kadar **koşullu** olarak durur.
+
+| | Durum |
+|---|---|
+| Kararın kendisi | **Değişmedi.** Flutter + `flutter_rust_bridge` + korunmuş Rust çekirdek. |
+| `spike/` iskeleti | **SİLİNDİ** (2026-09-26). `spike/` altında yalnız README vardı; ölçümler orada yaşıyordu. `.\tool.ps1 spike` artık yalnız prosedürün yerini söyler. |
+| **Prosedür** | **Yaşıyor.** `spike/README.md` → `docs/manual-test.md` olarak kurtarıldı; kararın beş sorusu ve karar kuralı orada kelimesi kelimesine duruyor. |
+| Ölçüm sayısı | **Sıfır.** Beş sorunun hiçbirine ölçülmüş cevap yok. |
+
+Protokolün taşınma gerekçesi: `spike/` bir **go/no-go probu iskeletiydi** ve
+silinecekti; kararın kendisi ise **yaşamaya devam etmelidir** — çünkü koşul
+taşınır değil, yerine getirilir. Bir kararın kendisi bir iskeletten daha kalıcıdır.
+Bu yüzden iki şey ayrıldı: iskelet silindi, prosedür `docs/manual-test.md` adıyla
+yaşamaya devam ediyor.
+
+Taşınan protokol, 0.2.0'ın gerçek yüzeyine göre uyarlandı:
+
+- Soru 1 (`rollback`) ve soru 2 (SDP parmak izi ≡ `getStats` parmak izi) aynen
+  kaldı; bunlar doğrudan Faz 4'teki SAS/DTLS işine beslenir.
+- Soru 3'ün ölçütü **10 senaryodur** (yukarıdaki düzeltme).
+- Soru 4 (dosya aktarımı) ve Soru 5 (soak) aynen kaldı.
+- Yeni olarak: **0.2.0'ın köprü gidiş-dönüşü gerçek iki cihazda doğrulanmalıdır**
+  — Rust çekirdek geçmişi ve eşi gerçekten açıp yazabiliyor mu. Bunu hiçbir
+  otomatik test kanıtlayamaz.

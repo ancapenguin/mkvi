@@ -1,34 +1,33 @@
-/// The reconnect loop, ported from the `useEffect` at `src/App.tsx:207-320`.
+/// The reconnect loop: an identity, a pair-scoped device id, a FRESH session id
+/// per epoch, a signature over `mkvi/discover/v2/…`, a socket, an announcement,
+/// and a backoff that resets on success.
 ///
-/// The shape is the original's: an identity, a pair-scoped device id, a FRESH
-/// session id per epoch, a signature over `mkvi/discover/v2/…`, a socket, an
-/// announcement, and a backoff that resets on success. What changed is that the
-/// three ways the original could stop reconnecting forever are gone, and each
-/// one is structural rather than a guard someone has to remember:
+/// ## The three ways this loop used to be able to stop for good
 ///
-/// 1. **A transient identity failure ended the loop.** `src/App.tsx:217-222`
-///    caught the failure, set a notice and `return`ed out of the enclosing
-///    async IIFE. The effect's dependencies could then never change again, so
-///    the app sat on "reconnecting" until the user restarted it. Here the
-///    identity read is INSIDE the loop and a throw is an attempt outcome.
-/// 2. **A stale epoch's teardown clobbered a newer epoch's state.** The
-///    `finally` at `src/App.tsx:290-303` wrote `setConnected(false)` and
-///    `setReconnecting(true)` without checking whether that epoch had been
-///    cancelled, so an epoch unwinding after its successor had started left the
-///    UI pinned on "reconnecting" with a live channel behind it. Here every
-///    write is behind [_isCurrent].
-/// 3. **An invalid endpoint threw a raw `TypeError` out of `connect()`.**
-///    `src/services/rendezvous.ts` built its URL with `new URL(path, endpoint)`
-///    OUTSIDE the promise, so `.catch()` on the returned promise never ran at
-///    all. Here the URL builder rejects, the driver classifies it, and the loop
+/// All three are structural here rather than guards someone has to remember,
+/// because "the reconnect loop stopped and only a restart brings it back" is the
+/// worst failure this application has:
+///
+/// 1. **A transient identity failure ended the loop.** An early version caught a
+///    failed identity read, set a notice and returned out of the enclosing async
+///    function. Nothing after that could ever change, so the app sat on
+///    "reconnecting" until the user restarted it. Here the identity read is
+///    INSIDE the loop and a throw is an attempt outcome.
+/// 2. **A stale epoch's teardown clobbered a newer epoch's state.** An epoch
+///    unwinding after its successor had already started wrote its teardown state
+///    unconditionally, so the UI could be left pinned on "reconnecting" with a
+///    live channel behind it. Here every write is behind [_isCurrent].
+/// 3. **An invalid endpoint threw out of `connect()`.** When the URL was built
+///    eagerly, outside the returned future, a `.catch()` on that future never ran
+///    at all and a raw `TypeError: Invalid URL` escaped as a crash instead of a
+///    retry. Here the URL builder rejects, the driver classifies it, and the loop
 ///    backs off and tries again.
 ///
-/// One further difference is forced by the Dart port and is not optional:
+/// One further difference is forced by the Dart client and is not optional:
 /// `IoSignalingSocket.close()` cancels its stream subscription before closing
 /// (`app/lib/signaling/rendezvous_client.dart:156-163`), so a socket the client
-/// closes itself never reports `onClose`. The TypeScript `client.close()` did
-/// reach `onDisconnect`, so the driver ends its own epoch explicitly wherever
-/// the original relied on that.
+/// closes itself never reports `onClose`. The driver therefore ends its own epoch
+/// explicitly wherever it would otherwise have relied on that callback.
 library;
 
 import 'dart:async';
@@ -48,8 +47,9 @@ typedef Delay = Future<void> Function(Duration duration);
 Future<void> waitForReconnectDelay(Duration duration) =>
     Future<void>.delayed(duration);
 
-/// Creates a fresh signaling client. TS: `new RendezvousClient()` inside the
-/// loop at `src/App.tsx:227`. One client per epoch, never reused.
+/// Creates a fresh signaling client. One client per epoch, never reused: a
+/// client carries per-connection state, so reusing one would let a dead
+/// connection's backlog leak into the next attempt.
 typedef RendezvousClientFactory = RendezvousClient Function();
 
 /// What the driver reconnects TO. Immutable, so a later endpoint edit is a new
@@ -72,10 +72,10 @@ final class ReconnectContext {
 
 /// Hides a bearer capability in a log line.
 ///
-/// `src/App.tsx` had no equivalent, which is how a discovery id ended up inside
-/// a user-facing notice more than once. The implementation lives in
-/// `peer_store.dart` with the other capability and is imported here, so the two
-/// layers cannot drift on what a log line is allowed to show.
+/// Without this, a discovery id ends up inside a user-facing notice more than
+/// once. The implementation lives in `peer_store.dart` with the other capability
+/// and is imported here, so the two layers cannot drift on what a log line is
+/// allowed to show.
 
 /// Why one attempt ended without a channel.
 ///
@@ -94,7 +94,8 @@ sealed class ReconnectFailure {
 }
 
 /// The endpoint is not usable: not an absolute http, https, ws or wss URL with
-/// a host. TS: a raw `TypeError: Invalid URL` escaping `connect()`.
+/// a host. Raised as a classified failure rather than escaping as a raw
+/// `TypeError: Invalid URL`.
 final class ReconnectEndpointUnusable extends ReconnectFailure {
   const ReconnectEndpointUnusable();
 
@@ -102,8 +103,8 @@ final class ReconnectEndpointUnusable extends ReconnectFailure {
   String get message => signalingConnectError;
 }
 
-/// This device's key could not be read, or could not sign with. TS:
-/// `src/App.tsx:221` and the `.catch` at `src/App.tsx:277`.
+/// This device's key could not be read, or could not sign with. A locked or
+/// momentarily unavailable keyring lands here, which is why it is retryable.
 final class ReconnectIdentityUnavailable extends ReconnectFailure {
   const ReconnectIdentityUnavailable();
 
@@ -112,7 +113,9 @@ final class ReconnectIdentityUnavailable extends ReconnectFailure {
 }
 
 /// The peer's signature did not verify, or the peer is not the one this device
-/// paired with. TS: `src/App.tsx:256-260`.
+/// paired with. The socket is closed: the peer on the other end has not proved
+/// who it is, so nothing further may be relayed over this connection. That
+/// retires the epoch, which retries with a fresh session id.
 final class ReconnectPeerUnverified extends ReconnectFailure {
   const ReconnectPeerUnverified();
 
@@ -120,9 +123,10 @@ final class ReconnectPeerUnverified extends ReconnectFailure {
   String get message => 'Bilinen cihaz kimliği doğrulanamadı.';
 }
 
-/// The socket could not be opened, or the transport refused to start. TS: the
-/// `catch` at `src/App.tsx:288-289`, whose detail was interpolated as
-/// `Yeniden bağlanılıyor: ${error.message}`.
+/// The socket could not be opened, or the transport refused to start. [detail] is
+/// the underlying text, appended to the Turkish notice when there is one worth
+/// showing — a user who sees *why* it could not connect can act on it, and one
+/// who sees only "reconnecting" cannot.
 final class ReconnectConnectFailed extends ReconnectFailure {
   const ReconnectConnectFailed([this.detail]);
 
@@ -163,9 +167,8 @@ final class ReconnectEpoch {
   /// 1-based attempt within this epoch.
   final int attempt;
 
-  /// A FRESH 32-byte base64url id per epoch. TS: `createRendezvousId()` inside
-  /// the loop at `src/App.tsx:229`. Reusing it across epochs would let a
-  /// replayed identity frame from a dead socket verify against a live one.
+  /// A FRESH 32-byte base64url id per epoch. Reusing it across epochs would let
+  /// a replayed identity frame from a dead socket verify against a live one.
   final String session;
 
   /// The pair-scoped device handle, stable for this (discovery, public key)
@@ -208,8 +211,7 @@ final class ReconnectEpoch {
 
   /// Sends [signal] to the peer, and reports whether it went out.
   ///
-  /// Returns false instead of throwing when the socket is already gone, which
-  /// is what the TypeScript `announce` did (`src/App.tsx:239-242`): the next
+  /// Returns false instead of throwing when the socket is already gone. The next
   /// socket announces anyway, so a throw here would only turn a lost announce
   /// into a dead loop.
   bool relay(SignalPayload signal) {
@@ -231,7 +233,7 @@ abstract class PeerTransportBinding {
   Future<void> openChannel(ReconnectEpoch epoch);
 
   /// Every relayed payload the driver did not consume, including the ones that
-  /// arrived BEFORE verification and were queued (TS: `src/App.tsx:280`).
+  /// arrived BEFORE verification and were queued.
   void handleSignal(SignalPayload signal);
 
   /// Called when an epoch ends, and only for the CURRENT epoch. An active call
@@ -278,8 +280,11 @@ final class ReconnectRetryScheduled extends ReconnectEvent {
   final Duration delay;
 }
 
-/// An attempt failed and the failure is bad enough to tell the user about, which
-/// is the `delay >= 2_800` test at `src/App.tsx:289`.
+/// An attempt failed and the failure is bad enough to tell the user about.
+///
+/// The threshold is deliberately late: the first second or two of a reconnect is
+/// normal startup jitter, and a notice for it would flash on every launch and
+/// train the user to ignore the one that matters.
 final class ReconnectAttemptFailed extends ReconnectEvent {
   const ReconnectAttemptFailed({
     required this.attempt,
@@ -450,11 +455,11 @@ final class ReconnectDriver {
         outcome = _AttemptOutcome.failed(_classify(error));
       }
       if (!_isCurrent(epoch)) return;
-      // TS: `delay = 700` at `src/App.tsx:285` runs as soon as a socket opens and
-      // BEFORE the sleep at `src/App.tsx:305`, so an epoch that reached a socket
-      // always sleeps the first 700 ms and the schedule only grows again for a
-      // failure that never reached one. The reset belongs HERE, not after the
-      // sleep, or a second successful reconnect would sleep 1260 ms.
+      // The first-sleep reset runs as soon as a socket opens and BEFORE the
+      // sleep, so an epoch that reached a socket always sleeps the first 700 ms
+      // and the schedule only grows again for a failure that never reached one.
+      // The reset belongs HERE, not after the sleep, or a second successful
+      // reconnect would sleep 1260 ms.
       if (outcome.reachedSocket) failures = 0;
       if (!await _waitBeforeRetry(epoch, failures, outcome.failure)) return;
       failures += 1;
@@ -498,19 +503,19 @@ final class ReconnectDriver {
   // One attempt
   // -----------------------------------------------------------------------
 
-  /// TS: the body of the `while (!cancelled)` loop at `src/App.tsx:226-307`.
+  /// One attempt, start to finish. Every step that can fail is a *value* here,
+  /// never an early return out of the loop.
   Future<_AttemptOutcome> _attempt(
     int epoch,
     ReconnectContext context,
     int attempt,
   ) async {
     // -- the endpoint, before anything is dialled. ----------------------
-    // `buildSignalingUrl` is the Dart client's fix for the
-    // `new URL(path, endpoint)` the TypeScript client built OUTSIDE its promise:
-    // that threw a bare `TypeError: Invalid URL` which the `.catch()` on the
-    // returned promise could not see, so a typo in the address left the app
-    // waiting forever with an unhandled error in the console. Validating here
-    // turns the same input into a reported, retryable state and dials nothing.
+    // Validating the URL here — rather than letting the client discover the
+    // problem when it dials — turns a typo in the address into a reported,
+    // retryable state and opens no socket at all. It also guarantees the
+    // endpoint is wrong in a way the user can be told about, instead of
+    // surfacing as an unhandled error the loop can never see.
     try {
       buildSignalingUrl(context.endpoint, peerPath, <String, String>{
         'pair': context.discoveryId,
@@ -520,10 +525,10 @@ final class ReconnectDriver {
       return _stale(epoch, const ReconnectEndpointUnusable());
     }
 
-    // -- identity. TS: src/App.tsx:217-222 ------------------------------
-    // The original `return`ed out of the whole IIFE on a failure. Here it is a
-    // value, the loop backs off, and the next attempt reads the key again: a
-    // keyring that was still unlocking three seconds ago is not broken.
+    // -- identity. ------------------------------------------------------
+    // A failure here is a value, the loop backs off, and the next attempt
+    // reads the key again: a keyring that was still unlocking three seconds
+    // ago is not broken.
     final DeviceIdentity identity;
     try {
       identity = await identityLoader.load();
@@ -532,7 +537,7 @@ final class ReconnectDriver {
     }
     if (!_isCurrent(epoch)) return _AttemptOutcome.abandoned();
 
-    // -- pair-scoped device id. TS: src/App.tsx:224 ----------------------
+    // -- pair-scoped device id. -----------------------------------------
     final String deviceId;
     try {
       deviceId = await pairScopedDeviceId(
@@ -544,7 +549,7 @@ final class ReconnectDriver {
     }
     if (!_isCurrent(epoch)) return _AttemptOutcome.abandoned();
 
-    // -- fresh session id and its signature. TS: src/App.tsx:229-231 ------
+    // -- fresh session id and its signature. ----------------------------
     final String session = sessionIdFactory();
     final String signature;
     try {
@@ -601,9 +606,8 @@ final class ReconnectDriver {
 
     void onSignal(SignalPayload signal) {
       if (signal is IdentitySignal) {
-        // Serialised, exactly as `src/App.tsx:248` chained its promises: two
-        // identity frames must not race into two transports. `_verify` never
-        // throws, so the chain never breaks.
+        // Serialised, so two identity frames must not race into two transports.
+        // `_verify` never throws, so the chain never breaks.
         verification = verification.then(
           (_) => _verify(epoch, context, re, client, retireEpoch, signal, seen),
         );
@@ -621,7 +625,7 @@ final class ReconnectDriver {
     _emit(ReconnectAttemptStarted(re));
 
     try {
-      // -- connect. TS: src/App.tsx:246-284 ----------------------------
+      // -- connect. ----------------------------------------------------
       // Raced against the retirement of this epoch, so a socket that never
       // completes its handshake cannot pin the loop. The loser of the race is
       // left with a handler attached by `Future.any`, so its error is consumed
@@ -633,7 +637,8 @@ final class ReconnectDriver {
           re.deviceId,
           onSignal: onSignal,
           onPresence: (int online) {
-            // TS: `if (online > 1) announce();` at `src/App.tsx:283`.
+            // Re-announce as soon as a second device is present, so this one
+            // learns about it without waiting for the next reconnect.
             if (online > 1) re.relay(re.identity);
           },
           onDisconnect: (SignalingCloseEvent _) => endEpoch(),
@@ -644,7 +649,8 @@ final class ReconnectDriver {
         client.close();
         return _AttemptOutcome.abandoned();
       }
-      // TS: `announce();` at `src/App.tsx:286`.
+      // The announce goes out on every open, not only on the first: a socket
+      // that reopens is announcing to a peer that may have no memory of us.
       re.relay(re.identity);
       await disconnected.future;
     } on _EpochRetired {
@@ -662,9 +668,9 @@ final class ReconnectDriver {
     return _AttemptOutcome.reached();
   }
 
-  /// TS: the `finally` at `src/App.tsx:290-303`, with the clobber fixed.
+  /// Ends an attempt, whether it succeeded, failed or was superseded.
   ///
-  /// The socket is always closed - that is housekeeping, not state. Closing the
+  /// The socket is always closed — that is housekeeping, not state. Closing the
   /// CHANNEL and reporting the epoch as closed is state, and it happens only if
   /// no NEWER epoch has taken over, so a superseded epoch cannot tear down a
   /// channel its successor has already opened and cannot emit a close that pins
@@ -685,7 +691,8 @@ final class ReconnectDriver {
     _emit(ReconnectEpochClosed(re));
   }
 
-  /// TS: the identity branch of the signal handler, `src/App.tsx:247-277`.
+  /// Verifies an incoming identity frame and, if it checks out, opens the
+  /// channel. Never throws: every failure becomes a rejected attempt.
   Future<void> _verify(
     int epoch,
     ReconnectContext context,
@@ -697,7 +704,7 @@ final class ReconnectDriver {
   ) async {
     // A repeated announcement of the SAME session is a keepalive, not a new
     // peer: re-verifying it would replace a live transport on every presence
-    // message. TS: `src/App.tsx:250`.
+    // message.
     final String incoming = signal.session ?? 'legacy';
     if (seen.verified && seen.remoteSession == incoming) return;
 
@@ -711,12 +718,13 @@ final class ReconnectDriver {
     } on Object {
       valid = false;
     }
-    // TS: `if (cancelled || epochClosed) return;` at `src/App.tsx:255`.
+    // Verification is asynchronous, so the epoch can be retired while it is in
+    // flight. Re-check before acting on the result.
     if (!_isCurrent(epoch)) return;
 
     if (!valid || signal.publicKey != context.peerPublicKey) {
-      // TS: `src/App.tsx:256-260`. The socket is closed, which retires the
-      // epoch, which retries with a new session id.
+      // The socket is closed, which retires the epoch, which retries with a new
+      // session id.
       _emit(const ReconnectAttemptRejected(ReconnectPeerUnverified()));
       endEpoch();
       client.close();
@@ -736,10 +744,8 @@ final class ReconnectDriver {
     }
     if (!_isCurrent(epoch)) return;
     // Re-announce so the far side sees this device under the NEW session id.
-    // TS: `announce();` at `src/App.tsx:274`.
     re.relay(re.identity);
-    // TS: `while (deferred.length) await transport.handleSignal(deferred.shift()!)`
-    // at `src/App.tsx:275`.
+    // Then release everything that arrived before verification, in order.
     while (seen.deferred.isNotEmpty) {
       transport.handleSignal(seen.deferred.removeAt(0));
     }
@@ -763,9 +769,8 @@ final class ReconnectDriver {
   /// A [SignalingException] from `connectKnown` means the socket itself could
   /// not be brought up - a refused connection, a DNS failure, a TLS failure.
   /// The endpoint's own shape was already checked at the top of the attempt, so
-  /// by the time a `SignalingException` arrives it is a transport problem and
-  /// its Turkish text is the detail to show, exactly as `src/App.tsx:289`
-  /// interpolated `error.message` into `Yeniden bağlanılıyor: …`.
+  /// by the time a [SignalingException] arrives it is a transport problem, and its
+  /// Turkish text is exactly the detail the user needs in the notice.
   static ReconnectFailure _classify(Object error) {
     if (error is SignalingException) {
       return ReconnectConnectFailed(error.message);
@@ -814,7 +819,9 @@ final class _AttemptOutcome {
 
   const _AttemptOutcome.abandoned() : failure = null, reachedSocket = false;
 
-  /// TS: `await client.connectKnown(...)` - did an epoch get to a socket?
+  /// Did an epoch get as far as a socket? This, not "did it succeed", is what
+  /// decides whether the backoff resets: an attempt that never dialled has proved
+  /// nothing about the network.
   final bool reachedSocket;
 
   final ReconnectFailure? failure;

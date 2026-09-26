@@ -3,40 +3,76 @@ Copyright 2026 MKVI contributors
 
 Bu ürün, MKVI katkıcıları tarafından geliştirilmiş yazılımı içerir.
 
+--------------------------------------------------------------------------------
+LİSANS: İKİLİ (DUAL) LİSANS
+--------------------------------------------------------------------------------
+
 Uygulama (masaüstü istemcisi) aşağıdaki ikisinden biriyle lisanslıdır — siz seçersiniz:
 
     Apache License, Version 2.0
     MIT License
 
-Bu, "ikili lisans" (dual license) düzenidir. `LICENSE-APACHE` ve `LICENSE-MIT`
-dosyaları her iki lisansın da eksiksiz metnini içerir; hangisini seçtiğiniz
-dağıtımda belirtilmelidir.
+Bu, "ikili lisans" (dual license) düzenidir. İki lisansın da eksiksiz metni depoda
+aynen bulunur; hangisini seçtiğiniz dağıtımda belirtilmelidir.
 
     Apache-2.0 metni:  ./LICENSE-APACHE
     MIT metni:         ./LICENSE-MIT
 
 --------------------------------------------------------------------------------
-ÖNEMLİ: İki dizin farklı lisanslıdır
+ÖNEMLİ: cloudflare/ DİZİNİ FARKLI LİSANSLIDIR
 --------------------------------------------------------------------------------
 
-Bu depodaki `cloudflare/` dizini (sinyalleşme sunucusu) **AGPL-3.0** ile lisanslıdır
-ve AGPL-3.0, uygulamanın lisansından farklıdır. AGPL'nin ağ sunucusu kapsamındaki
-"çalıştırılan programın kaynak kodunu uzaktan erişenlere sun" yükümlülüğü
-nedeniyle, bu dizini barındırma hizmeti olarak satmak/tekrar satmak lisansın
-şartlarına aykırı olur. Bu, kasıtlı bir seçimdir.
+Bu depodaki `cloudflare/` dizini (sinyalleşme sunucusu) AGPL-3.0 ile lisanslıdır ve
+AGPL-3.0, uygulamanın lisansından FARKLIDIR. AGPL'nin ağ sunucusu kapsamındaki
+"çalıştırılan programın kaynak kodunu uzaktan erişenlere sun" yükümlülüğü nedeniyle,
+bu dizini barındırma hizmeti olarak satmak veya başkasına ücretsiz/ücretli bir hizmet
+olarak sunmak lisansın şartlarına aykırı olur. Bu, KASITLI bir seçimdir ve
+hafifletilmemelidir.
 
     AGPL-3.0 metni:    ./cloudflare/LICENSE
 
-AGPL kapsamı yalnızca `cloudflare/` dizinindedir. Uygulamanın geri kalanı
-(React arayüzü, `crates/mkvi_core` Rust çekirdeği, `src-tauri` Tauri adaptörü,
-`app/` Flutter istemcisi) AGPL'ye tabi değildir.
+AGPL kapsamı YALNIZCA `cloudflare/` dizinindedir. Deponun geri kalanı —
+`app/` (Flutter arayüz), `crates/mkvi_core` (Rust çekirdek), `crates/mkvi_bridge`
+(flutter_rust_bridge yüzeyi), `design/` (tasarım token'ları) ve `vectors/` (tel
+sözleşmesi) — AGPL'ye tabi DEĞİLDİR.
 
 --------------------------------------------------------------------------------
-Üçüncü taraf yazılımlar
+ÜÇÜNCÜ TARAF YAZILIMLAR
 --------------------------------------------------------------------------------
 
-Bu dağıtım, MIT / Apache-2.0 / BSD / ISC lisanslı üçüncü taraf paketlerini
-kullanır. Tamamı ve gerekçeleri için `THIRD-PARTY-NOTICES.md` dosyasına bakın.
+Bu dağıtım MIT / Apache-2.0 / BSD / ISC lisanslı üçüncü taraf paketlerini
+kullanır. Bağımlılıkların tamamı, çözümlenmiş sürümleri ve **her birinin projede
+neden bulunduğunun gerekçesi** için:
 
-Üçüncü taraf yazılımların telif hakları ilgili sahiplerine aittir. MKVI
-bu paketlerin hiçbirini değiştirmediğini ve yeniden dağıtmadığını beyan eder.
+    ./THIRD-PARTY-NOTICES.md
+
+Özet:
+
+  * Rust çekirdek ve köprü — crates.io paketleri (Cargo.lock: 189 ve 238 paket)
+  * Dart / Flutter uygulaması — pub.dev paketleri (pubspec.lock: 76 paket)
+  * Tasarım sistemi — `design/`, tek geliştirme bağımlılığı `test`
+  * Sinyalleşme sunucusu — npm paketleri, ÜÇÜ DE devDependencies (çalışma
+    zamanında hiçbir üçüncü taraf paket yüklenmez)
+  * Derlenen yerel bileşen — SQLite (kamu malı, telif koruması yok)
+
+Depoda kopyalanan lisans metinleri yalnızca MKVI'nin kendi lisanslarıdır:
+LICENSE-MIT, LICENSE-APACHE ve cloudflare/LICENSE. Üçüncü taraf paketlerin kendi
+lisans metinleri paketlerinin kendi depolarından gelir; THIRD-PARTY-NOTICES.md
+onlara bağlantı verir, metin kopyalamaz.
+
+Üçüncü taraf yazılımların telif hakları ilgili sahiplerine aittir. MKVI bu
+paketlerin hiçbirini değiştirmediğini, fork etmediğini ve kendi kaynaklarıyla
+değiştirilmiş olarak yeniden dağıtmadığını beyan eder.
+
+--------------------------------------------------------------------------------
+DEĞİŞTİRİLMİŞ ÜÇÜNCÜ TARAF KOD
+--------------------------------------------------------------------------------
+
+Yoktur. Depoda vendor/, third_party/ veya patches/ dizini yoktur.
+
+--------------------------------------------------------------------------------
+KATKI
+--------------------------------------------------------------------------------
+
+Katkı verenlerin telif hakları kendilerine aittir ve katkılarını bu dosyadaki
+lisans koşullarıyla yapmış oldukları kabul edilir.

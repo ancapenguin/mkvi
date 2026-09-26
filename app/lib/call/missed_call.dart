@@ -6,17 +6,17 @@ import 'call_messages.dart';
 /// Why a call finished without becoming a conversation, or — for
 /// [endedNormally] — that it did and then finished.
 ///
-/// 0.1.x kept none of this: a declined call produced a rejected promise whose
-/// message reached the screen as a *media* error, a timed-out one produced
-/// `Arama yanıtı için zaman aşımı oluştu.` in the same place, and a cancelled one
-/// produced nothing at all. Three outcomes, one indistinguishable "error" notice.
+/// The point of the enum is that these stay distinguishable. Three different
+/// endings — a decline, a timeout and a cancellation — once reached the screen
+/// through one indistinguishable "error" notice (or through nothing at all), and a
+/// history that cannot say which one happened is not a history.
 enum MissedCallReason {
   /// The callee answered the answer screen with "Reddet", or the callee's media
   /// could not start and it had to decline instead.
   declined,
 
   /// Nobody answered within 45 s. On the caller side that is the offer timer; on
-  /// the callee side the ring timer, which 0.1.x did not have at all.
+  /// the callee side the ring timer.
   timedOut,
 
   /// The call was hung up — by the local user or by the peer — while the

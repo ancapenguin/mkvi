@@ -1,6 +1,6 @@
 [package]
 name = "mkvi_bridge"
-version = "0.1.4"
+version = "0.2.0"
 description = "MKVI Flutter köprüsü: mkvi_core'i flutter_rust_bridge ile Dart'a açar"
 authors = ["MKVI"]
 edition = "2021"

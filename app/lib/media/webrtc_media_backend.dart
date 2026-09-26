@@ -90,20 +90,19 @@ final class WebRtcMediaBackend
 
   /// Creates the audio, camera and screen transceivers, in that order.
   ///
-  /// The order and the `sendrecv` direction are the port of
-  /// `peer-transport.ts:78-80`, and they are load-bearing:
+  /// The order and the `sendrecv` direction are load-bearing:
   ///
   /// ```dart
-  /// this.audioTransceiver = this.pc.addTransceiver("audio", { direction: "sendrecv" });
-  /// this.cameraTransceiver = this.pc.addTransceiver("video", { direction: "sendrecv" });
-  /// this.screenTransceiver = this.pc.addTransceiver("video", { direction: "sendrecv" });
+  /// audio  = addTransceiver("audio", direction: sendrecv);
+  /// camera = addTransceiver("video", direction: sendrecv);
+  /// screen = addTransceiver("video", direction: sendrecv);
   /// ```
   ///
-  /// "Keep stable, dedicated senders. In particular the screen sender must not
-  /// replace the camera sender, because both video sources may be live at once."
-  /// Two `video` transceivers with nothing attached are an answer carrying two
-  /// empty `m=` sections, and neither side renegotiates again — which is what makes
-  /// turning the camera on during a voice call a `replaceTrack`.
+  /// Three *dedicated* senders, and in particular the screen sender must not
+  /// stand in for the camera one, because both video sources may be live at
+  /// once. Two `video` transceivers with nothing attached are an answer carrying
+  /// two empty `m=` sections, and neither side renegotiates again — which is what
+  /// makes turning the camera on during a voice call a `replaceTrack`.
   ///
   /// Creating a transceiver raises `onRenegotiationNeeded` — the plugin's spelling,
   /// and not `onNegotiationNeeded` — which is expected exactly once, here.
@@ -190,8 +189,7 @@ final class WebRtcMediaBackend
   Future<CapturedMedia> getDisplayMedia(DisplaySource source) async {
     final Map<String, Object?> constraints = <String, Object?>{
       // Display audio would need a second output loopback the plugin does not
-      // expose, and the TypeScript original asked for `audio: false` too
-      // (`peer-transport.ts:167`).
+      // expose, so it is requested as absent rather than as `false`.
       'audio': false,
       'video': <String, Object?>{
         // The shape `FlutterScreenCapture::GetDisplayMedia` reads:

@@ -6,13 +6,24 @@
 /// up with a string that was written next to it and never checked.
 ///
 /// The distinctions here are not cosmetic. [UpdateFailureLegacyKey] is separated
-/// from [UpdateFailureSignatureRejected] because the release key configured in
-/// `src-tauri/tauri.conf.json:41` is a retired ("legacy") minisign key - its
-/// algorithm field decodes to `Ed`, not `ED` - so a strict verifier refuses
-/// every signature that key can ever produce. Reporting that as a possible
-/// tampering is a lie that has now been shown to a user on every attempted
-/// update since 0.1.4. `crates/mkvi_core/src/update.rs:38-48` makes the same
-/// split on the Rust side, for the same reason.
+/// from [UpdateFailureSignatureRejected] because the release key the 0.1.x line
+/// shipped is a retired ("legacy") minisign key - its algorithm field decodes to
+/// `Ed`, not `ED` - so a strict verifier refuses every signature that key can
+/// ever produce. Reporting that as a possible tampering is a lie the user cannot
+/// act on, so it gets a case of its own.
+/// `crates/mkvi_core/src/update.rs:38-48` makes the same split on the Rust side,
+/// for the same reason.
+///
+/// [UpdateFailureReleaseKeyMissing] is a third cut of the same kind: a build
+/// compiled without a release key at all is a build mistake, and it must not be
+/// able to borrow either of the other two sentences.
+///
+/// Correction, 2026-09-26: this file used to say that lie had been shown to a
+/// user on every attempted update in the retired line's whole life. It had not -
+/// the old Tauri updater passes `allow_legacy = true` (`tauri-plugin-updater`
+/// 2.10.1, `src/updater.rs:1461`), so 0.1.x never got far enough to reach a
+/// signature at all. The legacy key blocks 0.2.0 and later, whose core is strict
+/// on purpose.
 library;
 
 import 'update_messages.dart';
@@ -31,11 +42,13 @@ sealed class UpdateFailure {
 
 /// The feed could not be fetched: DNS, TLS, a refused connection, a 404.
 ///
-/// TS: the reason updating has never worked. `endpoints` in
-/// `src-tauri/tauri.conf.json:43` points at
-/// `raw.githubusercontent.com/ancapenguin/mkvi-updates/main/latest.json`, and
-/// that repository does not exist, so every check has always failed at the
-/// first step.
+/// The reason updating had never worked in 0.1.x, and the reason it is worth
+/// naming carefully: that line read its feed from a **separate, private
+/// repository**, and a private repository is not served to an unauthenticated
+/// client at all. The answer was not "restart the worker" - it was that the feed
+/// had to live somewhere publicly readable, which is where
+/// `releaseFeedUrlText` comes from: this repository's own releases, whose
+/// assets are public downloads.
 final class UpdateFailureFeedUnreachable extends UpdateFailure {
   const UpdateFailureFeedUnreachable();
 
@@ -122,6 +135,24 @@ final class UpdateFailureKeyUnreadable extends UpdateFailure {
 
   @override
   String toString() => 'UpdateFailureKeyUnreadable()';
+}
+
+/// The build carries no release key: the binary was compiled without
+/// `--dart-define=MKVI_UPDATE_KEY_B64`.
+///
+/// Not a key that failed to verify and not a key that is the wrong shape - there
+/// is no key. Reported before the verifier is even asked, because a bridge that
+/// is absent would answer "verification unavailable" and send whoever is reading
+/// after a problem that is not this one. The remedy is a release build with the
+/// flag, so the sentence says so.
+final class UpdateFailureReleaseKeyMissing extends UpdateFailure {
+  const UpdateFailureReleaseKeyMissing();
+
+  @override
+  UpdateMessage get messageId => UpdateMessage.releaseKeyMissing;
+
+  @override
+  String toString() => 'UpdateFailureReleaseKeyMissing()';
 }
 
 /// This build's own version string could not be parsed, so an offered release

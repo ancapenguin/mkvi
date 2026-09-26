@@ -4,8 +4,8 @@
 /// behaviours are faked *deliberately* rather than conveniently, because each one
 /// is a defect the suite has to be able to reproduce:
 ///
-/// * [RecordingChannel] can refuse a frame — the channel-down case, which 0.1.x
-///   had no way to represent at all.
+/// * [RecordingChannel] can refuse a frame — the channel-down case, which a
+///   channel-gated send path had no way to represent at all.
 /// * [FakeFileSink] can report a **short write**, so "progress is derived from
 ///   bytes actually written" is a claim the suite can falsify.
 /// * [FakeFileSink] implements the same never-overwrite rule as

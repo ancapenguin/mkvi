@@ -2,18 +2,17 @@
 ///
 /// The Rust core owns the encrypted SQLite file; it does not exist yet, so
 /// nothing in this layer touches `dart:io` or calls a bridge. What the layer
-/// *does* fix is the contract, because the old contract is what let the UI lose
+/// *does* fix is the contract, because a loose contract is what lets a UI lose
 /// history:
 ///
-/// * `App.tsx` read the newest page with `listLocalHistory()` and then called
-///   `.reverse()` on the whole result. The order of the conversation therefore
-///   depended on the store returning a newest-first array, which is not
-///   something the type said. Here every page is **oldest-first** and the
-///   reversal is a property of the type, not of an array method someone has to
-///   remember.
-/// * There was no "is there anything older?" answer, so a scroll-to-top could
-///   not know when to stop. [HistoryPage.hasMore] is that answer, and it is the
-///   only thing that can ever set `ChatTimeline.exhausted`.
+/// * A page is **oldest-first**, and the newest page is *selected* rather than
+///   obtained whole and reversed. Reversing a whole result makes the order of
+///   the conversation depend on the store returning newest-first, which is not
+///   something a type can say. Here the reversal is a property of the type, not
+///   of an array method someone has to remember.
+/// * There has to be an "is there anything older?" answer, or a scroll-to-top
+///   cannot know when to stop. [HistoryPage.hasMore] is that answer, and it is
+///   the only thing that can ever set `ChatTimeline.exhausted`.
 ///
 /// Nothing in this file is unbounded: [HistoryStore.retentionLimit] bounds what a
 /// production implementation is expected to keep, and every page is bounded by

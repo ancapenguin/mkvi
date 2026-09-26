@@ -102,9 +102,9 @@ abstract interface class MediaSenderHandle {
 ///
 /// Named, not indexed, because the *reason* there are three is that the screen
 /// sender must never stand in for the camera one: both video sources can be live
-/// at once, and the TypeScript original says so at `peer-transport.ts:76-80`
-/// ("Keep stable, dedicated senders"). An index would let that be re-broken by
-/// an off-by-one.
+/// at once and each needs its own stable sender. An index would let that be
+/// re-broken by an off-by-one, and the failure would be a screen share silently
+/// shown as the other person's face.
 final class MediaSenderSet {
   const MediaSenderSet({
     required this.audio,
@@ -124,14 +124,19 @@ abstract interface class MediaSenderRegistry {
   /// Creates the audio, camera and screen transceivers as `sendrecv`, in that
   /// order, and returns their senders. Called exactly once per connection.
   ///
-  /// This is the only negotiation this layer ever causes. Creating a transceiver
-  /// has to be in the first offer — a mid-call `addTransceiver` would be a
-  /// renegotiation, and a renegotiation is a glare risk. Upstream issue #625
-  /// makes that worse: SDP `rollback` is unverified there, so the glare recovery
-  /// `peer-transport.ts:322` relies on (`setLocalDescription({type: "rollback"})`)
-  /// cannot be relied on in the port. Pre-creating all three at connection time
-  /// removes the media side of the problem entirely: from then on, turning the
-  /// camera on is a `replaceTrack` and needs no offer at all.
+  /// This is the only negotiation this layer ever causes, and the reason is
+  /// arithmetic rather than taste. A transceiver has to exist before the first
+  /// offer, because adding one mid-call is a renegotiation, and recovering from
+  /// a collision mid-call needs SDP `rollback` — which is an unverified upstream
+  /// capability (flutter_webrtc issue #625, open since 2021). A layer that
+  /// renegotiated would therefore depend on something nobody has proven works.
+  ///
+  /// Pre-creating all three at connection time removes the glare window on the
+  /// media side entirely: there is nothing left to add later, so turning the
+  /// camera on, starting a screen share and stopping either of them are all
+  /// `replaceTrack` calls that need no offer at all. `MediaController`'s
+  /// negotiation counter is the measurable form of that promise — it is 1 after
+  /// `open()` and stays 1 for the life of the call.
   Future<MediaSenderSet> open();
 
   /// Releases the registry's own resources.

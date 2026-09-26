@@ -1,9 +1,12 @@
-// A 1:1 port of `src/services/display-name.test.ts` (8 tests).
+// Display-name sanitisers and the `profile` branch of the control parser:
+// 8 tests.
 //
 // These cover `safeDisplayName` and the `profile` branch of `parseControl`,
-// which the 27-test transport suite only touched indirectly. The invisible code
-// points are spelled as `String.fromCharCode` so that no zero-width or bidi
-// character is ever stored literally in this source file.
+// which the transport suite only touches indirectly. The invisible code points
+// are spelled as `String.fromCharCode` so that no zero-width or bidi character
+// is ever stored literally in this source file — the right-to-left override and
+// the BOM in particular are invisible in an editor and in a diff, and a test
+// file that hides its own fixtures is a test file nobody can review.
 
 import 'dart:convert';
 
@@ -39,7 +42,6 @@ void main() {
       () {
         expect(safeDisplayName('Ayşe Gül'), 'Ayşe Gül');
       },
-      // src/services/display-name.test.ts:9
     );
 
     test(
@@ -47,7 +49,6 @@ void main() {
       () {
         expect(safeDisplayName('  ali   veli \n'), 'ali veli');
       },
-      // src/services/display-name.test.ts:13
     );
 
     // The name is rendered verbatim in the header, so the peer must not be able
@@ -60,7 +61,6 @@ void main() {
         expect(safeDisplayName('a${rightToLeftOverride}b'), 'a b');
         expect(safeDisplayName('${byteOrderMark}ad'), 'ad');
       },
-      // src/services/display-name.test.ts:19
     );
 
     test(
@@ -71,7 +71,6 @@ void main() {
           hasLength(PeerProtocol.maxDisplayNameLength),
         );
       },
-      // src/services/display-name.test.ts:26
     );
 
     test(
@@ -79,7 +78,6 @@ void main() {
       () {
         expect(safeDisplayName('   $zeroWidthSpace '), '');
       },
-      // src/services/display-name.test.ts:30
     );
   });
 
@@ -98,7 +96,6 @@ void main() {
           ProfileMessage(id: id, name: 'Kuzen'),
         );
       },
-      // src/services/display-name.test.ts:36
     );
 
     test(
@@ -115,7 +112,6 @@ void main() {
           ProfileMessage(id: id, name: 'kö tü'),
         );
       },
-      // src/services/display-name.test.ts:40
     );
 
     test(
@@ -144,7 +140,6 @@ void main() {
           throwsProtocolException,
         );
       },
-      // src/services/display-name.test.ts:44
     );
   });
 }

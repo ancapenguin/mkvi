@@ -1,12 +1,12 @@
 /// Every Turkish string `lib/media` can put in front of a user, in one place.
 ///
 /// `lib/core/protocol/peer_protocol.dart` keeps the wire strings together for the
-/// same reason this file exists. The Tauri build had no single owner for the media
-/// error box: `ChatCallWorkspace.tsx` wrote its own wording inline, `App.tsx`
-/// invented a second one, and the loudest of the three was
-/// `setMediaError(error instanceof Error ? error.message : ...)`
-/// (`ChatCallWorkspace.tsx:352`, `:368`, `:376`, `:419`, `:441`) — which put a raw
-/// English WebView `DOMException` message straight into a Turkish UI.
+/// same reason this file exists. A media error box with no single owner is the
+/// normal state of affairs: one call site writes its own wording inline, another
+/// invents a second wording, and the loudest of them is usually
+/// `setError(error.message)`. That last one is the failure worth designing
+/// against, because it puts a raw English platform `DOMException` message —
+/// `NotReadableError: Could not start video source` — straight into a Turkish UI.
 ///
 /// A string that only exists at a call site is a string that can be an English
 /// exception message. Nothing in `lib/media` builds a message by interpolation;
@@ -26,8 +26,9 @@ final class MediaTexts {
   // bulunamadı" send the user to a different cable.
   // ---------------------------------------------------------------------------
 
-  /// TS: `captureMedia`'s combined `NotAllowedError` sentence, used when a call
-  /// asked for both devices and permission was refused. Byte-identical.
+  /// The combined `NotAllowedError` sentence, used when a call asked for both
+  /// devices and permission was refused. One sentence, because a combined
+  /// `getUserMedia` cannot say which device the OS refused.
   static const String callPermissionDenied =
       "Kamera veya mikrofon izni verilmedi. Windows ayarlarından MKVI'ye izin ver.";
 
@@ -88,11 +89,11 @@ final class MediaTexts {
   /// The share never started for a reason the user caused: the picker was closed,
   /// or the window they picked had already gone.
   ///
-  /// Not an error: the TypeScript original suppressed the same case
-  /// (`ChatCallWorkspace.tsx:440` skips `NotAllowedError`), because closing a
-  /// picker is not something to apologise for. On Windows there is no native picker
-  /// to close — the application builds the list itself — so the reachable case is
-  /// the stale-source one, and the wording covers both.
+  /// Not an error: closing a picker is not something to apologise for, and a
+  /// screen share that never started because the user changed their mind should
+  /// not look like a failure. On Windows there is no native picker to close —
+  /// the application builds the list itself — so the reachable case is the
+  /// stale-source one, and the wording covers both.
   static const String screenCancelled =
       'Ekran paylaşımı iptal edildi ya da paylaşılan pencere kapandı.';
 
@@ -130,10 +131,9 @@ final class MediaTexts {
   // that left while the call was live
   // ---------------------------------------------------------------------------
 
-  /// TS: the second rung's `warning` at `ChatCallWorkspace.tsx:316`.
-  /// Byte-identical. This is the ONE degradation the ladder is still allowed to
-  /// perform silently-but-announced, because the video the user asked for is
-  /// still on the wire.
+  /// The second rung of the capture ladder. This is the ONE degradation the ladder
+  /// is still allowed to perform silently-but-announced, because the video the
+  /// user asked for is still on the wire — only the microphone is missing.
   static const String microphoneMissingInVideoCall =
       'Mikrofon bulunamadı; yalnızca görüntü gönderilecek.';
 

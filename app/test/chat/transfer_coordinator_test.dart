@@ -5,17 +5,15 @@
 // * `crates/mkvi_core/src/state.rs` documents the 0-byte-file bug: the concurrency
 //   cap was checked *after* the destination was created, so every rejected offer
 //   left an empty file and a peer could fill the download folder with them.
-// * `peer-transport.ts` emitted `file-progress` carrying `transfer.received` —
-//   the peer's own byte count — and `App.tsx` `trackTransfer` wrote the row
-//   straight from the last event with no ordering guard, so any out-of-order or
+// * Progress was taken from the *peer's* own running byte count and patched into
+//   the row from the last event with no ordering guard, so any out-of-order or
 //   short event moved the bar backwards.
-// * `cancelFile` removed the send and the receive under one id and then sent a
-//   `file-cancel` unconditionally, so cancelling a finished transfer told the peer
-//   its file had been cancelled.
-// * `App.tsx` had `const [transfers, setTransfers] = useState([])` with append-only
-//   writes, so the transfer list was unbounded.
-// * `sendFile` rejected on a bad size and left the row `active` at 0% for ever,
-//   because only a progress event could ever have moved it.
+// * Cancelling removed the send and the receive under one id and then sent a
+//   `file-cancel` unconditionally, so cancelling a finished transfer told the
+//   peer its file had been cancelled.
+// * The transfer list was append-only and unbounded.
+// * A send rejected for a bad size left the row `active` at 0% for ever, because
+//   only a progress event could ever have moved it.
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -371,8 +369,8 @@ void main() {
     });
 
     test('a cancel that races the sink open deletes the file it created', () async {
-      // TS: `if (this.receives.get(id) !== transfer) { void sink.abort(id); return; }`
-      // — the guard that stops an accept landing after a cancel and leaving a file.
+      // The guard that stops an accept landing after a cancel and leaving a file
+      // behind on disk.
       final Harness h = Harness();
       final String id = tid('c');
       h.announce(id, size: 1024);
@@ -590,10 +588,9 @@ void main() {
     test(
       'a re-announced id is refused rather than replacing a live transfer',
       () {
-        // The 0.1.x `Map.set` behaviour, already fixed in `PeerFileReceiver`:
-        // re-announcing a live id reset `received` to 0 and `accepted` to false
-        // mid-transfer, and never counted against the cap — a denial of service
-        // handed to the peer for free.
+        // Re-announcing a live id must not replace it: that reset `received` to 0
+        // and `accepted` to false mid-transfer, and never counted against the
+        // cap — a denial of service handed to the peer for free.
         final Harness h = Harness();
         final String id = tid('c');
         h.announce(id, size: 100, name: 'a.bin');
@@ -912,8 +909,8 @@ void main() {
 
   group('the layer opens a sink in exactly one place', () {
     test('the source calls FileSink.open once, and aborts everywhere else', () {
-      // THE DEFECT, at its root: `crates/mkvi_core/src/state.rs` checked the cap
-      // *after* `File::create`, so every rejected offer left a 0 byte file. The
+      // THE DEFECT, at its root: the cap used to be checked *after* the
+      // destination was created, so every rejected offer left a 0 byte file. The
       // fix in Rust was a reordering inside one function; the fix here is that
       // there is exactly one function in the whole Dart layer that can create a
       // file, and it runs after every check that can refuse.

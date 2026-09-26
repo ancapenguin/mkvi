@@ -1,9 +1,10 @@
-// The contract between this port and the old UI, asserted rather than assumed.
+// The status enum, its labels, and the refusals — asserted rather than assumed.
 //
-// `CallStatus` is a port of `export type CallStatus` in
-// `src/components/ChatCallWorkspace.tsx:15` and its labels are the `statusLabels`
-// table of the same file. Nothing else in the port can keep those two in step, so
-// this file does.
+// [CallStatus] is the one place the call's lifecycle is written down, so nothing
+// else in the layer can keep the set and its Turkish labels in step. This file
+// does: the labels are pinned verbatim, and the two predicates that decide
+// whether a step is allowed (`isLive`, `isSettled`) are pinned against the
+// statuses that must be in each.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/call/call.dart';
@@ -12,7 +13,7 @@ import 'package:mkvi/core/protocol/peer_protocol.dart';
 
 void main() {
   group('CallStatus', () {
-    // `statusLabels` of `src/components/ChatCallWorkspace.tsx:202-209`, verbatim.
+    // The Turkish label of every status, verbatim.
     const Map<CallStatus, String> ported = <CallStatus, String>{
       CallStatus.idle: 'Arama yok',
       CallStatus.outgoing: 'Yanıt bekleniyor',
@@ -68,12 +69,12 @@ void main() {
   });
 
   group('timeouts', () {
-    // `CALL_OFFER_TIMEOUT_MS`, `src/services/peer-transport.ts:25`.
+    // The caller's 45 s offer timeout.
     test("the caller's offer timeout is the ported 45 s", () {
       expect(CallMachine.callOfferTimeout, const Duration(seconds: 45));
     });
 
-    // The callee had no timeout at all in 0.1.x; this is the symmetric one.
+    // The callee had no timeout at all before; this is the symmetric one.
     test("the callee's ring timeout is also 45 s", () {
       expect(CallMachine.callRingTimeout, const Duration(seconds: 45));
     });
@@ -93,8 +94,8 @@ void main() {
 
   group('modes', () {
     // Three `sendrecv` transceivers exist from the moment the connection is
-    // built (`src/services/peer-transport.ts:78-80`), so a mode only decides
-    // whether the camera track is live — it never triggers an offer.
+    // built, so a mode only decides whether the camera track is live - it never
+    // triggers an offer.
     test('a mode is a permission, not a negotiation', () {
       expect(modeWantsVideo(CallMode.video), isTrue);
       expect(modeWantsVideo(CallMode.audio), isFalse);
@@ -119,12 +120,12 @@ void main() {
     });
 
     test('the refusals ported from TypeScript are byte-identical', () {
-      // `requestCall`, `src/services/peer-transport.ts:105`.
+      // A refusal that a call is already live.
       expect(
         CallRefusal.callInProgress.message,
         'Başka bir arama zaten etkin.',
       );
-      // `acceptCall`, `src/services/peer-transport.ts:123`.
+      // A refusal that the answer screen is gone.
       expect(
         CallRefusal.incomingCallNotFound.message,
         'Gelen arama bulunamadı.',
@@ -151,8 +152,8 @@ void main() {
     });
 
     test('keep the promise the answer dialog makes', () {
-      // `ChatCallWorkspace.tsx:184`. The port keeps it literally true: no
-      // PublishMedia action exists before `accept` has emitted one.
+      // Kept literally true: no PublishMedia action exists before `accept` has
+      // emitted one.
       expect(
         CallMessages.mediaPromise,
         'Kabul edene kadar kamera ve mikrofonundan hiçbir şey gönderilmez.',

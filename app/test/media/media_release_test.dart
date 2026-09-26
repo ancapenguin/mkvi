@@ -1,10 +1,9 @@
-/// Releasing the media: the leak the Tauri build had.
+/// Releasing the media: the camera that stayed on after the call.
 ///
-/// A camera that stayed on after the call. `ChatCallWorkspace.tsx` stopped streams
-/// from three different `useEffect`s, one of which was keyed on
-/// `callStatus === "ended"` — so a decline, a ring timeout, a failed publish or a
-/// screen-share failure all left the camera running, and `stopStream` on unmount was
-/// the only other exit.
+/// Streams used to be stopped from three different places, one of them keyed on
+/// a single status value — so a decline, a ring timeout, a failed publish or a
+/// screen-share failure all left the camera running, and unmount was the only
+/// other exit. One ledger and one drain is the answer.
 ///
 /// **No hardware.** The leak being pinned is that a `FakeTrack` the OS handed over
 /// is still running with no sender behind it, which is what a live camera is.
@@ -117,9 +116,9 @@ void main() {
     test('a detach that throws does not skip the tracks', () async {
       // The path that makes a cleanup function a leak: one sender refusing must not
       // prevent the other two from being detached, nor the tracks from being
-      // stopped. The TypeScript build rethrew from `stopCall`
-      // (`peer-transport.ts:221-222`) after stopping, which is better, but its stop
-      // itself ran in a React effect keyed on one status value.
+      // stopped. Rethrowing after the stop would be better than not stopping at
+      // all, but the stop itself has to be unconditional — that is the property
+      // under test here.
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);
       await harness.open();

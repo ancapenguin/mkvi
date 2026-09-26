@@ -2,19 +2,18 @@ import 'call_messages.dart';
 
 /// Why a *user-triggered* step was refused, with the Turkish line the UI shows.
 ///
-/// A refusal is not an exception. The old build threw or rejected — 0.1.4's
-/// `requestCall` returned a rejected promise and `App.tsx` showed its message as
-/// a media error, which is how "Arama reddedildi." ended up rendered in the same
-/// red box as a missing microphone. Refusing quietly and naming the reason keeps
-/// the two apart.
+/// A refusal is not an exception. An earlier shape of this code signalled every
+/// refusal by throwing, and the UI caught one kind of throw and rendered its
+/// message in a single red box — which is how "Arama reddedildi." ended up
+/// rendered in the same place as a missing microphone. Refusing quietly and
+/// naming the reason keeps the two apart.
 ///
 /// A refusal never changes state. The one exception is
 /// [callInProgress] on an incoming offer, which is answered with a `call-decline`
 /// on the wire: the peer is owed a decision, and `Meşgul.` is that decision.
 /// Every other refusal is silent.
 enum CallRefusal {
-  /// Another call is live, so a new invitation was refused. TS: the
-  /// `requestCall` rejection at `peer-transport.ts:105`.
+  /// Another call is live, so a new invitation was refused.
   callInProgress(CallMessages.callInProgress),
 
   /// The answer screen is gone: the call ended, the ring timeout fired, or the id
@@ -35,7 +34,7 @@ enum CallRefusal {
 
   const CallRefusal(this.message);
 
-  /// The Turkish text. Byte-identical to the `new Error(...)` literal the
-  /// TypeScript original used where one existed.
+  /// The Turkish text. Byte-identical to any literal the wire or a peer's UI may
+  /// already be showing for the same refusal.
   final String message;
 }

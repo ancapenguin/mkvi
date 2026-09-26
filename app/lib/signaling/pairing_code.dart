@@ -8,9 +8,10 @@
 /// 13 characters x 32 symbols is 65 bits, which is far more than a guessing
 /// attacker can search inside the 15 minute room window.
 ///
-/// Mirrors `createPairingCode` / `normalizePairingCode` in
-/// `src/domain/signaling.ts`. The shapes are pinned by `vectors/wire-v1.json`,
-/// which both implementations read.
+/// The shapes are pinned by the `pairingCodeShape`, `normalizePairingCode` and
+/// `pairingCodeAccepted` cases in `vectors/wire-v1.json`. That file is a shared
+/// contract: the Worker that validates the code is not this code, so a code this
+/// layer generates but the Worker rejects is a pairing that can never start.
 library;
 
 import 'dart:math';

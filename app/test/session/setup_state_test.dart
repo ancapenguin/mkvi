@@ -1,11 +1,10 @@
 /// BUG 1, the white pairing screen: "After closing and reopening the app it
 /// does not reconnect; it dumps me back on the same white screen."
 ///
-/// `src/App.tsx` had exactly four returns and the pairing screen was the
-/// fallback one, reached whenever `knownPeer === null`. A first run, a corrupt
-/// store and a transient IPC failure all leave it null - the `.catch` at
-/// `src/App.tsx:163-164` only called `setNotice` - so two of the three rendered
-/// pairing.
+/// When the UI decided what to render from a single nullable "known peer"
+/// value, the pairing screen was the fallback branch, reached whenever that value
+/// was null. A first run, a corrupt store and a transient read failure all left
+/// it null — the catch only set a notice — so two of the three rendered pairing.
 ///
 /// Every test in this file is about that, and the assertion is always the same
 /// single question: [SetupState.showsPairingScreen].
@@ -139,8 +138,8 @@ void main() {
     });
 
     test('a store that throws is broken, not a first run', () async {
-      // `src/App.tsx:163-164` set a notice and left `knownPeer` null, which is
-      // the value the pairing screen was gated on.
+      // A store that throws leaves no peer at all, which is the value the
+      // pairing screen was gated on.
       final FakePeerStore store = FakePeerStore(
         answer: PeerFound(storedPeer),
         throwOnRead: StateError('IPC köprüsü yanıt vermiyor.'),
@@ -353,8 +352,8 @@ void main() {
     test(
       'a record with no display_name is a 0.1.x record, not a corrupt one',
       () async {
-        // 0.1.0 - 0.1.3 did not persist a name. Decoding it must not be an error,
-        // and it must not show the pairing screen either.
+        // An older stored record did not persist a name. Decoding it must not be
+        // an error, and it must not show the pairing screen either.
         final PeerReadResult decoded = decodeStoredPeer(<Object?, Object?>{
           'public_key': fakePeerPublicKey,
           'discovery_id': 'room',

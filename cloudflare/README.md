@@ -5,13 +5,16 @@ birbirini bulması ve WebRTC el sıkışmasını kurması için gereken küçük
 birbirine iletir. **Mesaj, dosya, ses, video ve ekran içeriğinin hiçbiri bu
 sunucudan geçmez.** İçerik doğrudan iki cihaz arasında akar (P2P).
 
-Uygulamayı kendiniz derleyip çalıştıracaksanız bu sunucuya ihtiyacınız yoktur:
-resmî kurulum dosyası hazır bir sunucu adresiyle gelir. **Kendi sunucunuzu kendi
-Cloudflare hesabınıza kurarsanız** verileriniz tamamen kendi hesabınızda kalır ve
-hiçbir yabancıya bağımlı olmazsınız. Kurulum beş adımda sürer.
+**Bu sunucuyu kurmanız gerekir.** MKVI hiçbir sunucuyu gömmez ve kimseye
+hizmet vermez; herkes kendi Worker'ını kendi Cloudflare hesabına kurar. Gerekçe:
+ücretsiz katmanda bir eşleşme yaklaşık 115 GB-s Durable Object süresi tüketiyor
+(~110 eşleşme/gün), sonrası herkes için ölü; ayrıca keyfi kodla şişirme mümkün
+ve MKVI kimsine hizmet etmiyor. Uygulamadaki **Sinyal sunucusu** ayarı boş
+gelir ve doldurulması gerekir (`app/lib/settings/connection_settings.dart`).
+Kurulum beş adımda sürer.
 
 > **Lisans: AGPL-3.0.** Bu lisans **yalnızca bu dizine** uygulanır; deponun geri
-> kalanı (`src/`, `src-tauri/`) `Apache-2.0 OR MIT` altındadır. Tam metin:
+> kalanı (`app/`, `crates/`, `design/`) `Apache-2.0 OR MIT` altındadır. Tam metin:
 > [`LICENSE`](./LICENSE). AGPL'nin ağ sunucusu kapsamındaki yükümlülüğü
 > (çalıştırılan programın kaynak kodunu o programı kullananlara sunma) bu
 > sunucunun **barındırma hizmeti olarak yeniden satılmasını** engellemek için

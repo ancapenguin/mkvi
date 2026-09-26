@@ -8,10 +8,9 @@ import 'media_texts.dart';
 /// for two completely different situations depending on the call site:
 /// `NotAllowedError` from `getUserMedia` means the OS refused a permission
 /// prompt, while `NotAllowedError` from `getDisplayMedia` means the user closed
-/// the source list. The TypeScript original got this right by accident only —
-/// `toggleScreenShare` (`ChatCallWorkspace.tsx:440`) special-cased
-/// `NotAllowedError` — and the Dart port makes the context an explicit argument
-/// so it cannot be forgotten at a new call site.
+/// the source list. The context is therefore an explicit argument here, so a new
+/// call site cannot forget it and turn "you closed the picker" into "you denied
+/// permission".
 enum MediaSourceKind { microphone, camera, screen }
 
 /// What went wrong, in the vocabulary the plugin and the OS actually produce.
@@ -47,10 +46,10 @@ enum MediaFaultKind {
 ///
 /// Two fields and nothing else. There is deliberately **no** field carrying the
 /// platform's own text: a value that is never stored cannot be rendered by
-/// accident, and the old build's `setMediaError(error.message)`
-/// (`ChatCallWorkspace.tsx:352`) is what put `NotReadableError: Could not start
-/// video source` in front of a Turkish user. The raw text goes to the
-/// `MediaDiagnostics` sink the app wires to its log, not here.
+/// accident, and reading `error.message` straight off a caught exception is what
+/// puts `NotReadableError: Could not start video source` in front of a Turkish
+/// user. The raw text goes to the `MediaDiagnostics` sink the app wires to its
+/// log, not here.
 final class MediaFault {
   const MediaFault(this.kind, this.source);
 

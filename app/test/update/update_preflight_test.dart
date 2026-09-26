@@ -1,15 +1,15 @@
-// The startup check, and the one defect it exists for.
+// The startup check, and the two build-time defects it exists for.
 //
-// The key configured in `src-tauri/tauri.conf.json:41` decodes to minisign's
-// retired "Ed" algorithm rather than the prehashed "ED", so
-// `mkvi_core::update::verify_artifact` (`crates/mkvi_core/src/update.rs:98`)
-// refuses every signature that key can ever produce. The Tauri updater reported
-// that as a possibly modified download, on every attempt, for the whole life of
-// the product - and "updating has never worked" shipped with a 404 endpoint as
-// well, so nobody ever got far enough to be told the truth about either.
+// 1. A release key in minisign's retired "Ed" algorithm rather than the
+//    prehashed "ED": `mkvi_core::update::verify_artifact`
+//    (`crates/mkvi_core/src/update.rs:98`) refuses every signature such a key
+//    can ever produce, and the old updater reported that as a possibly modified
+//    download - sending a user hunting for an attacker who does not exist.
+// 2. A build compiled without `--dart-define=MKVI_UPDATE_KEY_B64` or
+//    `--dart-define=MKVI_VERSION`, which carries no key and no version at all.
 //
-// These tests pin the difference: the legacy key is a *named*, actionable
-// failure, it is refused before any request goes out, and it is never
+// These tests pin the difference: a missing value is named as a missing value, a
+// legacy key is named as a legacy key, and neither of them is ever
 // `UpdateFailureSignatureRejected`.
 
 import 'dart:convert';
@@ -26,13 +26,13 @@ import 'package:mkvi/update/update_verifier.dart';
 import 'support/fakes.dart';
 
 void main() {
-  group('the key this product actually ships', () {
+  group('the key the retired 0.1.x line shipped', () {
     test(
-      'decodes to the retired algorithm, which is why updating never worked',
+      'decodes to the retired algorithm, which is why a strict core refuses it',
       () {
-        // Read the real value out of the config and check the two bytes that
-        // decide everything. `Ed` is legacy; `ED` is the only accepted form.
-        const String key = tauriConfiguredKey;
+        // Read the real value out and check the two bytes that decide
+        // everything. `Ed` is legacy; `ED` is the only accepted form.
+        const String key = retiredLegacyKey;
         const String marker = 'untrusted comment: minisign public key:';
         // The value is a base64 encoded `minisign.pub` file, so the two algorithm
         // bytes are inside the base64 payload on the second line of it.
@@ -46,7 +46,7 @@ void main() {
         expect(
           payload[1],
           0x64,
-          reason: 'the shipped key is the legacy "Ed" form',
+          reason: 'the retired key is the legacy "Ed" form',
         );
       },
     );
@@ -55,7 +55,7 @@ void main() {
       'is reported as its own failure, not as a possible modification',
       () async {
         final UpdateHarness harness = UpdateHarness(
-          publicKey: tauriConfiguredKey,
+          publicKey: retiredLegacyKey,
         );
         addTearDown(harness.dispose);
         harness.verifier.keyState = const ReleaseKeyLegacy();
@@ -75,6 +75,86 @@ void main() {
         );
       },
     );
+  });
+
+  group('a build that was given no release key at all', () {
+    test('is named as a missing key, and the verifier is never asked', () async {
+      // A key that is absent is not a key that failed to verify, and a bridge
+      // that is not wired would answer "verification unavailable" - which sends
+      // whoever is reading after the wrong problem entirely.
+      final UpdateHarness harness = UpdateHarness(publicKey: '');
+      addTearDown(harness.dispose);
+
+      final UpdatePreflight result = await runUpdatePreflight(
+        config: harness.config,
+        verifier: harness.verifier,
+      );
+      expect(result, isA<UpdatePreflightBlocked>());
+      final UpdatePreflightBlocked blocked = result as UpdatePreflightBlocked;
+      expect(blocked.failure, isA<UpdateFailureReleaseKeyMissing>());
+      expect(blocked.canUpdate, isFalse);
+      expect(blocked.failure, isNot(isA<UpdateFailureKeyUnreadable>()));
+      expect(
+        blocked.failure,
+        isNot(isA<UpdateFailureVerificationUnavailable>()),
+      );
+      expect(blocked.message, UpdateMessage.releaseKeyMissing.text);
+      expect(
+        harness.verifier.classifyCalls,
+        0,
+        reason: 'there is no key to classify',
+      );
+    });
+
+    test('a whitespace-only key is the same answer', () async {
+      // `hasReleaseKey` trims, because a value that arrives as a single newline
+      // from a build script is still no key at all.
+      for (final String empty in <String>['', ' ', '\n', '\t  ']) {
+        final UpdateHarness harness = UpdateHarness(publicKey: empty);
+        addTearDown(harness.dispose);
+        expect(harness.config.hasReleaseKey, isFalse, reason: 'len: ${empty.length}');
+        final UpdatePreflight result = await runUpdatePreflight(
+          config: harness.config,
+          verifier: harness.verifier,
+        );
+        expect(
+          (result as UpdatePreflightBlocked).failure,
+          isA<UpdateFailureReleaseKeyMissing>(),
+          reason: 'len: ${empty.length}',
+        );
+      }
+    });
+
+    test('check() refuses without fetching the feed', () async {
+      final UpdateHarness harness = UpdateHarness(publicKey: '');
+      addTearDown(harness.dispose);
+      harness.offerUpdate();
+
+      final UpdateReport report = await harness.client.check();
+      expect(harness.failureOf(report), isA<UpdateFailureReleaseKeyMissing>());
+      expect(harness.fetcher.requests, 0, reason: 'the feed was never asked');
+    });
+
+    test('a build with a key but no version says so about the version', () async {
+      // The other half of the same mistake, and a different sentence: a missing
+      // key and an unreadable version are two different build flags.
+      final UpdateHarness harness = UpdateHarness(version: '');
+      addTearDown(harness.dispose);
+
+      final UpdatePreflight result = await runUpdatePreflight(
+        config: harness.config,
+        verifier: harness.verifier,
+      );
+      expect(
+        (result as UpdatePreflightBlocked).failure,
+        isA<UpdateFailureCurrentVersionUnreadable>(),
+      );
+      expect(
+        harness.verifier.classifyCalls,
+        1,
+        reason: 'the key was fine, so it was classified',
+      );
+    });
   });
 
   group('the legacy key is refused before any request', () {
@@ -236,8 +316,8 @@ void main() {
           UnavailableSignatureVerifier();
       final UpdateConfig config = UpdateConfig(
         currentVersion: currentVersion,
-        feedUrl: Uri.parse(liveFeedUrl),
-        publicKeyB64: tauriConfiguredKey,
+        feedUrl: releaseFeedUrl,
+        publicKeyB64: prehashedKey,
       );
       final UpdatePreflight result = await runUpdatePreflight(
         config: config,
@@ -260,6 +340,6 @@ void main() {
   });
 }
 
-/// Base64 decoding, so the test reads the shipped key the way the Rust core does
+/// Base64 decoding, so the test reads the retired key the way the Rust core does
 /// without depending on `dart:convert`'s tolerance elsewhere.
 List<int> _base64Bytes(String value) => base64.decode(value);

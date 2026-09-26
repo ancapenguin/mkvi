@@ -7,9 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
 *.local
 
 # Editor directories and files
@@ -23,14 +20,22 @@ dist-ssr
 *.sln
 *.sw?
 
-# Cloudflare Worker
-cloudflare/node_modules
+# --- Cloudflare Worker --------------------------------------------------------
+# The ONLY npm project left in the repo, so this is the only `node_modules` rule.
+# `cloudflare/package.json` keeps its own lockfile on purpose: its wrangler and
+# typescript versions are chosen independently of everything else.
+# NOTE: the retired 0.1.x line also ignored `dist/` and `dist-ssr/` (Vite output,
+# consumed by Tauri as `frontendDist: ../dist`). No bundler runs at the root
+# any more, so those rules are gone with it. Flutter output is `build/` below.
+node_modules/
 cloudflare/wrangler-login.*
 
-# Tauri updater signing material: never commit the private key or its password.
+# --- Release signing material -------------------------------------------------
+# Never commit the private key or its password. Still required even though the
+# Tauri updater plugin is gone: the feed schema (latest.json + minisign) is
+# unchanged, only its client moved into Rust (mkvi_core::update).
 *.key
 *.key.pub
-tauri.conf.local.json
 .secrets/
 .release-assets/
 
@@ -43,15 +48,6 @@ tauri.conf.local.json
 build/
 *.iml
 
-# --- Week 0 spike (go/no-go probe) -------------------------------------------
-# The spike source is tracked: it is the evidence for the Flutter decision and
-# the regression probe for flutter_webrtc on Windows. Only its output is not.
-spike/build/
-spike/.dart_tool/
-spike/windows/flutter/ephemeral/
-spike/.flutter-plugins
-spike/.flutter-plugins-dependencies
-
 # --- Avenox second brain -----------------------------------------------------
 # Beyin KOD DEPOSUNUN DISINDA yasar: mkvi/ yanindaki mkvi-beyin/ klasorunde.
 # Buraya tekrar kurulmamasi icin guvenlik agi: kendi dosyalari asla izlenmesin.
@@ -59,7 +55,11 @@ spike/.flutter-plugins-dependencies
 .beyin-version
 .beyin-runtime.json
 .beyin-state/
-AGENTS.md
+# 2026-09-26: `AGENTS.md` ve `CLAUDE.md` bu listeden CIKARILDI. Ikisi de
+# projenin kilavuz dosyalari ve katilimcinin ilk okudugu sey. Once buradaydilar
+# ve public depoya hic girmiyorlardi - dosya oradaydi ama kimse goremiyordu.
+# `AGENTS.md` tek yazili kaynak; `CLAUDE.md` onun tureti ve
+# `.\tool.ps1 docs` ile her kapida yeniden uretilir.
 .agents/
 daily/
 notes/
@@ -73,7 +73,11 @@ Beyni Guncelle.command
 Beyni Guncelle.desktop
 
 # Ajan calisma zamani artik bu depoda degil; kalinti dosyalar izlenmez.
-CLAUDE.md
+#
+# 2026-09-26: `CLAUDE.md` bu listeden CIKARILDI. Artik izleniyor, cunku
+# `AGENTS.md`'nin tureti ve katilimcinin ilk okudugu dosya. Once buradaydi ve
+# public depoya hic girmeyecekti - dosya oradaydi ama kimse goremeyecekti.
+# `.\tool.ps1 docs` her kapida yeniden uretir, yani elle duzenlenmemeli.
 .claude/
 .codex/
 .omp/

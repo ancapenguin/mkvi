@@ -1,10 +1,9 @@
 /// The Turkish error classifier.
 ///
-/// The old build's worst habit was `setMediaError(error instanceof Error ?
-/// error.message : "…")` at five call sites in `ChatCallWorkspace.tsx` (`:352`,
-/// `:368`, `:376`, `:419`, `:441`). A WebView `DOMException` message went straight
-/// into a Turkish UI, so a user could be told
-/// `NotReadableError: Could not start video source`.
+/// The worst habit this classifier replaces: reading `error.message` off a
+/// caught exception and showing it, at five separate call sites. A platform
+/// `DOMException` message went straight into a Turkish UI, so a user could be
+/// told `NotReadableError: Could not start video source`.
 ///
 /// These tests pin the replacement in both directions: every known shape of failure
 /// lands on the right Turkish sentence, and **no** input can put its own text

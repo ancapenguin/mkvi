@@ -2,8 +2,7 @@ import 'peer_protocol.dart';
 
 /// The 12 wire discriminators of the control channel.
 ///
-/// TS: the `type` string literal of every member of the `PeerControlMessage`
-/// union. Keeping them in an enum means the parser can dispatch with a `switch`
+/// Keeping them in an enum means the parser can dispatch with a `switch`
 /// expression that the compiler proves exhaustive, and a typo cannot become an
 /// unknown frame on the wire.
 enum ControlMessageType {
@@ -34,7 +33,7 @@ enum ControlMessageType {
   }
 }
 
-/// Media direction of a call offer. TS: `CallMode`.
+/// Media direction of a call offer.
 enum CallMode {
   audio('audio'),
   video('video');
@@ -55,18 +54,17 @@ enum CallMode {
 ///
 /// ## Why a sealed class hierarchy and not one validated bag of fields
 ///
-/// The TypeScript source models this as a discriminated union of twelve object
-/// literals, where each literal *is* the schema. Dart has no union types, and
-/// the two ways to fake one are both worse: `Map<String, Object?>` re-creates
-/// the untyped bag the union exists to prevent, and a single wide class with
-/// twelve nullable fields makes every consumer re-derive which fields are
-/// meaningful for which variant. A sealed hierarchy is the exact analogue —
-/// `sealed` gives the same exhaustiveness guarantee in `switch` that the
-/// TypeScript union gives in its `switch`, and every field is `final` instead of
-/// a mutable property on a bag of untyped keys.
+/// The wire schema is a union of twelve object shapes, where each shape *is* the
+/// schema. Dart has no union types, and the two ways to fake one are both worse:
+/// `Map<String, Object?>` re-creates the untyped bag the union exists to
+/// prevent, and a single wide class with twelve nullable fields makes every
+/// consumer re-derive which fields are meaningful for which variant. A sealed
+/// hierarchy is the exact analogue — `sealed` gives the same exhaustiveness
+/// guarantee in `switch` that the union gives in its `switch`, and every field
+/// is `final` instead of a mutable property on a bag of untyped keys.
 ///
 /// The one thing that is *not* enforced by the type system is the 32 hex
-/// character shape of [id]; the original leaves that to `parseControl` too, so
+/// character shape of [id]; that is left to the parser too, so
 /// `PeerControlMessage.fromJson` is the only supported constructor path.
 sealed class PeerControlMessage {
   const PeerControlMessage({required this.id});
@@ -80,12 +78,12 @@ sealed class PeerControlMessage {
   /// The discriminator as it travels on the wire, i.e. `kind.wireName`.
   String get type => kind.wireName;
 
-  /// The exact JSON shape the TypeScript `JSON.stringify(message)` produced.
+  /// The exact JSON shape that travels on the wire.
   ///
-  /// Key order matches the original object literals (type first) so an encoded
-  /// frame is byte-identical to the one the Tauri build sends, and an absent
-  /// optional field is omitted instead of being written as `null` — which is
-  /// what `JSON.stringify` does for `undefined`.
+  /// Key order is type-first, and an absent optional field is **omitted** rather
+  /// than written as `null` — a `null` on the wire is a value the peer has to
+  /// distinguish from an absent one, and it makes an encoded frame differ from
+  /// the one another implementation produces for the same message.
   Map<String, Object?> toJson();
 
   /// The fields that take part in equality, besides [id].
@@ -116,8 +114,9 @@ sealed class PeerControlMessage {
 /// Base of the four control frames that carry nothing but a transfer id:
 /// `file-accept`, `file-complete`, `call-accept` and `call-end`.
 ///
-/// TS: the four `{ type; id }` literals, which `parseControl` passes through
-/// untouched and `receiveControl` dispatches with a four-way `if`.
+/// One base class rather than four unrelated types, because all four are pure
+/// acknowledgements: the parser passes them through untouched and the receiver
+/// only ever dispatches on the id.
 sealed class IdOnlyMessage extends PeerControlMessage {
   const IdOnlyMessage({required super.id});
 
@@ -140,13 +139,13 @@ final class ChatMessage extends PeerControlMessage {
 
   final String text;
 
-  /// TS: `sentAt: number`.
+  /// A non-negative integral millisecond count, validated as one.
   ///
-  /// Not mirrored: 0.1.x only checked `typeof sentAt === "number"`, so `1.5` and
-  /// `-1e300` were accepted verbatim and then rendered as a message time. The
-  /// frozen line keeps that permissiveness because its peer depends on it; here
-  /// the field is a non-negative integral millisecond count and is validated as
-  /// one. Every writer sends `Date.now()`, so nothing legitimate is refused.
+  /// The field is not merely "a number": a fractional or absurd timestamp is
+  /// accepted by a `is num` check and then rendered as a message time, so the
+  /// parser rejects anything that is not a whole, finite, non-negative value.
+  /// Every writer sends the current epoch milliseconds, so nothing legitimate is
+  /// refused.
   final int sentAt;
 
   @override
@@ -207,9 +206,9 @@ final class FileDeclineMessage extends PeerControlMessage {
   @override
   ControlMessageType get kind => ControlMessageType.fileDecline;
 
-  /// Raw slice to [PeerProtocol.maxReasonLength], *not* `safeReason` — the
-  /// TypeScript original deliberately leaves control characters in a file
-  /// decline, and only a call decline is scrubbed.
+  /// The peer's reason, already scrubbed by `safeReason` and capped at
+  /// [PeerProtocol.maxReasonLength] on the parse path, which is the only
+  /// supported way to build this message from the wire.
   final String? reason;
 
   @override
@@ -312,8 +311,7 @@ final class PairConfirmedMessage extends PeerControlMessage {
 }
 
 /// Each device announces the name it chose for itself; the peer may still alias
-/// it locally. TS: the `profile` literal, whose `name` is run through
-/// `safeDisplayName` by `parseControl`.
+/// it locally. The `name` is run through `safeDisplayName` by the parser.
 final class ProfileMessage extends PeerControlMessage {
   const ProfileMessage({required super.id, required this.name});
 

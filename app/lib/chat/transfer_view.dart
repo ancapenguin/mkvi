@@ -1,20 +1,17 @@
 /// One row of the transfer list, as a value.
 ///
-/// TS: the `FileTransferView` type at `ChatCallWorkspace.tsx:33` and the JSX that
-/// renders it at `ChatCallWorkspace.tsx:577-593`. Everything the row shows —
-/// the headline, the percentage, the state word, the two accessibility labels
-/// and the byte pair — is a getter here, so the Turkish text lives in
-/// `ChatMessages` and the surface has nothing to spell.
+/// Everything the row shows — the headline, the percentage, the state word, the
+/// two accessibility labels and the byte pair — is a getter here, so the Turkish
+/// text lives in `ChatMessages` and the surface has nothing to spell.
 ///
 /// ## The three states became five
 ///
-/// The original had `state: "active" | "done" | "failed"` and rendered
-/// `className={`mkvi-transfer is-${transfer.state}`}`. Three states cannot say
-/// what happened to a transfer the user cancelled, so a cancel rendered as
-/// `failed` with a Turkish reason in the detail line — the same red row as a
-/// real failure. `offered` is added for the same reason: a transfer the peer
+/// Three states — active, done, failed — cannot say what happened to a transfer
+/// the user cancelled, so a cancel has to render as `failed` with a Turkish
+/// reason in the detail line: the same red row as a real failure. `offered` is
+/// added for the same reason in the other direction: a transfer the peer
 /// announced and the user has not answered yet is neither active nor failed, and
-/// rendering it as an active 0% row is how "Alınıyor: 0%" came to mean both
+/// rendering it as an active 0% row is how "Alınıyor: 0%" comes to mean both
 /// "waiting for you" and "stalled".
 library;
 
@@ -25,9 +22,10 @@ import 'chat_messages.dart';
 /// Where a transfer is, in the order the states are reached.
 ///
 /// `cancelled` and `failed` are both terminal and both dismissible; the surface
-/// offers a close button for any state except [active] and [offered], exactly
-/// like the original's `transfer.state !== "active"` guard — widened so an
-/// answered offer can also be cleared.
+/// offers a close button for any state except [active] and [offered] — a live
+/// transfer must be cancelled rather than merely hidden, and an unanswered offer
+/// must not be dismissible, because closing it would leave the peer waiting for
+/// a decision that can no longer be given.
 enum TransferPhase {
   /// The peer announced it; nobody has accepted or declined yet.
   offered,
@@ -79,9 +77,11 @@ final class TransferView {
   /// when it failed or was cancelled, `null` while it is still moving.
   final String? detail;
 
-  /// The progress fraction, clamped. TS: the `ratio` of
-  /// `ChatCallWorkspace.tsx:579`, which was `Math.min(1, transferred / total)`
-  /// guarded by `total > 0`.
+  /// The progress fraction, clamped into `0.0`..`1.0`.
+  ///
+  /// Clamping is not decoration: [total] can be 0 before an offer is announced
+  /// and a sink that stored fewer bytes than declared would otherwise render a
+  /// bar past its end or a negative one.
   double get ratio {
     if (total <= 0) return 0;
     final double raw = transferred / total;
@@ -89,14 +89,13 @@ final class TransferView {
     return raw > 1 ? 1 : raw;
   }
 
-  /// `0`..`100`. TS: `Math.round(ratio * 100)`.
+  /// `0`..`100`.
   int get percent => (ratio * 100).round();
 
-  /// TS: the `Gönderiliyor:` / `Alınıyor:` headline, `ChatCallWorkspace.tsx:583`.
+  /// The row headline, naming the direction and the file.
   String get heading => ChatMessages.transferHeading(direction, name);
 
-  /// TS: the `Tamamlandı` / `Başarısız` / `%${percent}` span,
-  /// `ChatCallWorkspace.tsx:584`.
+  /// The state word, or a live percentage while the transfer is still moving.
   String get stateLabel => switch (phase) {
     TransferPhase.offered => ChatMessages.awaitingDecision,
     TransferPhase.active => '%$percent',
@@ -105,14 +104,14 @@ final class TransferView {
     TransferPhase.cancelled => ChatMessages.cancelled,
   };
 
-  /// TS: the `aria-label` of the close button, `ChatCallWorkspace.tsx:585`.
+  /// The `aria-label` of the close button.
   String get dismissLabel => ChatMessages.dismissTransferLabel(name);
 
-  /// TS: the `aria-label` of the progress bar, `ChatCallWorkspace.tsx:587`.
+  /// The `aria-label` of the progress bar.
   String get progressLabel => ChatMessages.transferProgressLabel(name);
 
-  /// TS: the `transfer.detail ?? formatBytes(transferred) + " / " + formatBytes(total)`
-  /// detail line, `ChatCallWorkspace.tsx:590`.
+  /// The reason or saved path when there is one, otherwise the `transferred /
+  /// total` pair. A moving transfer has no reason, so it falls back to numbers.
   String get detailLabel => detail ?? ChatMessages.bytePair(transferred, total);
 
   TransferView copyWith({

@@ -1,8 +1,11 @@
 // The binary file frame, byte for byte, plus the protocol half of an incoming
-// transfer. The TypeScript suite had no test for either: `FILE_HEADER_BYTES`,
-// `FILE_CHUNK_BYTES` and `MAX_CONCURRENT_RECEIVES` were private constants of
-// `src/services/peer-transport.ts` that only the untested WebRTC path used, so
-// nothing pinned them. These tests do.
+// transfer.
+//
+// The frame header size, the chunk size and the concurrency cap are the three
+// numbers a file transfer is most likely to get wrong, and all three are
+// invisible at runtime: a wrong header size does not throw, it silently
+// misattributes bytes to the wrong transfer. So they are pinned here rather than
+// trusted.
 
 import 'dart:typed_data';
 
@@ -133,7 +136,7 @@ void main() {
       );
       expect(bytes.sublist(17), payload);
       // The frame carries no length prefix: the length is however many bytes
-      // arrived past the header, exactly as the TypeScript reader assumed.
+      // arrived past the header.
       expect(
         bytes.length - PeerProtocol.fileFrameHeaderBytes,
         frame.payloadLength,
@@ -255,11 +258,10 @@ void main() {
     test(
       'refuses a re-announced id instead of resetting the live transfer',
       () {
-        // 0.1.x does `this.receives.set(message.id, transfer)`, so re-announcing
-        // an id that is already being received silently replaces it: `received`
-        // goes back to 0, `accepted` goes back to false, and because `set`
-        // overwrites rather than adds it never trips the capacity guard. A peer
-        // can therefore reset the progress the user is watching, forever, while
+        // A re-announced id must NOT replace the live transfer. Doing so resets
+        // `received` to 0 and `accepted` to false mid-transfer, and — because it
+        // overwrites rather than adds — never trips the capacity guard. A peer
+        // could then reset the progress the user is watching, forever, while
         // still occupying exactly one slot. This port refuses the repeat.
         final PeerFileReceiver receiver = PeerFileReceiver();
         receiver.offer(offer(id: id, size: 10));

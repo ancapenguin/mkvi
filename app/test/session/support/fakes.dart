@@ -263,8 +263,8 @@ Future<void> pumpUntil(
 
 /// Feeds a [FakeSocket] the identity frame a real peer would send.
 ///
-/// [session] defaults to a valid 43 character id; pass [legacy] for a 0.1.x
-/// peer, which sends no `session` key at all.
+/// [session] defaults to a valid 43 character id; pass [legacy] for a v1 peer,
+/// which sends no `session` key at all.
 void announceIdentity(
   FakeSocket socket, {
   String publicKey = fakePeerPublicKey,

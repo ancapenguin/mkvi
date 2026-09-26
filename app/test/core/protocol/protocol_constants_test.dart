@@ -1,6 +1,10 @@
 // The protocol constants are the one thing a port must not duplicate, so this
-// file pins them to the TypeScript originals and pins the arithmetic and the
-// hand-written patterns to the constants beside them.
+// file pins the arithmetic and the hand-written patterns to the constants beside
+// them.
+//
+// These numbers are a wire contract: both ends of a call must agree on them byte
+// for byte. Most of them cannot be observed at runtime — a wrong header size
+// misattributes bytes rather than throwing — so they are pinned here.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/core/protocol/peer_protocol.dart';
@@ -79,8 +83,9 @@ void main() {
 
   group('the hand-written patterns agree with the constants', () {
     // text_sanitizer.dart spells its patterns out as literals so they read like
-    // the TypeScript regular expressions. These assertions are what stop a
-    // constant from being changed without the pattern following.
+    // the regular expressions they encode. These assertions are what stop a
+    // constant from being changed without the pattern following — a pattern and
+    // its length constant that disagree reject valid ids or accept invalid ones.
     test(
       'transferIdPattern matches exactly transferIdLength lowercase hex characters',
       () {

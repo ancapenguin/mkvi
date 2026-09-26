@@ -20,7 +20,8 @@ import 'package:mkvi/core/protocol/text_sanitizer.dart';
 import 'update_failure.dart';
 import 'update_version.dart';
 
-/// The one target the desktop shell ships, named the way Tauri names it.
+/// The one target the desktop app ships, named the way the Tauri updater names
+/// it - which is the name the release's `latest.json` has to use.
 /// `WINDOWS_TARGET` at `crates/mkvi_core/src/update.rs:15`.
 const String windowsUpdateTarget = 'windows-x86_64';
 

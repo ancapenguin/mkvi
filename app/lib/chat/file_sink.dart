@@ -7,9 +7,9 @@
 /// defect this port is written against:
 ///
 /// > The concurrency cap is checked **before** the file is created. Creating
-/// > first and capping afterwards (the 0.1.x behaviour) leaves a 0 byte file
-/// > behind for every rejected transfer, so a peer that keeps offering files
-/// > fills the download folder with empty names.
+/// > first and capping afterwards leaves a 0 byte file behind for every rejected
+/// > transfer, so a peer that keeps offering files fills the download folder with
+/// > empty names.
 ///
 /// In the browser build the same mistake was one line of React away:
 /// `acceptFile` opened the sink *after* `MAX_CONCURRENT_RECEIVES` had already

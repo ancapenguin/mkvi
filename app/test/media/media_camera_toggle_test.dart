@@ -12,10 +12,9 @@ import 'support/media_fakes.dart';
 
 void main() {
   group('turning the camera on during a voice call', () {
-    // The pre-negotiated `sendrecv` camera transceiver
-    // (`peer-transport.ts:78-80`) is what makes this possible without an offer.
-    // The call machine's `upgradeToVideo` has promised a frameless upgrade, and
-    // this is the Dart side of that promise.
+    // The pre-negotiated `sendrecv` camera transceiver is what makes this
+    // possible without an offer. The call machine's `upgradeToVideo` has
+    // promised a frameless upgrade, and this is the Dart side of that promise.
     test('attaches with one replaceTrack and no renegotiation', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);
@@ -73,12 +72,11 @@ void main() {
   });
 
   group('turning the camera off', () {
-    // ChatCallWorkspace.tsx:397-421 removed the track from the stream and stopped
-    // it, then published. When the publish failed the camera was already stopped
-    // and the call was left with no camera and no error; when it succeeded the
-    // track was stopped but nothing guaranteed it on every path. `replaceTrack(null)`
-    // plus a stop in the same step, with a rollback if the detach fails, is the
-    // port's answer.
+    // Removing the track from the stream and stopping it *before* publishing is
+    // the shape of the defect: when the publish failed the camera was already
+    // stopped and the call was left with no camera and no error.
+    // `replaceTrack(null)` plus a stop in the same step, with a rollback if the
+    // detach fails, is the answer.
     test('detaches with replaceTrack(null) and stops the track', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);
@@ -295,8 +293,8 @@ void main() {
   });
 
   group('muting', () {
-    // ChatCallWorkspace.tsx:390 got this right: `track.enabled = false` keeps the
-    // sender and its silence, where detaching would show the peer a broken track.
+    // `track.enabled = false` keeps the sender and its silence, where detaching
+    // would show the peer a broken track.
     test('disables the track without detaching it', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);

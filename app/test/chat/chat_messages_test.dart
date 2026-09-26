@@ -1,10 +1,10 @@
 // Every user-facing string this layer can produce, proved Turkish and non-empty.
 //
-// "Turkish" is not a matter of taste here, it is the defect: `ChatCallWorkspace.tsx`
-// had Turkish labels in its JSX next to an **English** `state` union
-// (`"active" | "done" | "failed"`) that it dropped straight into a class name, and
-// `formatBytes` used `.` as the decimal separator between strings that were all
-// `tr-TR`. A surface that mixes the two is read by one person, in one language.
+// "Turkish" is not a matter of taste here, it is the defect. An **English**
+// `state` union ("active" | "done" | "failed") used to be dropped straight into
+// a class name beside Turkish labels, and `formatBytes` used `.` as the decimal
+// separator between strings that were all `tr-TR`. A surface that mixes the two
+// is read by one person, in one language.
 //
 // So this file checks four things mechanically rather than by eye:
 //
@@ -179,8 +179,8 @@ void main() {
     });
 
     test('byte sizes use the Turkish decimal comma', () {
-      // THE DEFECT: `formatBytes` at `ChatCallWorkspace.tsx:107` produced "1.5 MB"
-      // with a full stop, between two `tr-TR` strings. Turkish writes 1,5.
+      // THE DEFECT: byte sizes used to be rendered "1.5 MB" with a full stop,
+      // between two `tr-TR` strings. Turkish writes 1,5.
       expect(ChatMessages.formatBytes(0), '0 B');
       expect(ChatMessages.formatBytes(1023), '1023 B');
       expect(ChatMessages.formatBytes(1024), '1 KB');

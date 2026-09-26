@@ -1,8 +1,5 @@
-// The caller's half of the state machine.
-//
-// TS: `requestCall` and the `call-accept` / `call-decline` / `call-end` branches
-// of `receiveControl` in `src/services/peer-transport.ts`, plus the `onStartCall`
-// handler of `src/App.tsx:563-573`.
+// The caller's half of the state machine: the offer, the 45 s offer timeout, and
+// the three ways a call the caller started can end before it connects.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/call/call.dart';
@@ -199,8 +196,7 @@ void main() {
   });
 
   group('the caller offer timeout', () {
-    // Bug 2, caller half: the 45 s `CALL_OFFER_TIMEOUT_MS` of
-    // `src/services/peer-transport.ts:113`.
+    // Bug 2, caller half: the 45 s offer timeout.
     test('fires, sends call-end and gives the call up as a timeout', () {
       final CallHarness harness = CallHarness();
       final String id = harness.nextId();
@@ -209,8 +205,9 @@ void main() {
       harness.timers.only.fire();
 
       expect(harness.machine.status, CallStatus.ended);
-      // TS: the caller sends a `call-end` before it rejects
-      // (`peer-transport.ts:110-113`), and this port keeps that.
+      // The caller sends a `call-end` before it gives up, and this port keeps
+      // that: a silent give-up would leave the peer ringing a call that will
+      // never be answered.
       expect(
         harness.sent.last,
         isA<CallEndMessage>().having((CallEndMessage m) => m.id, 'id', id),
@@ -257,7 +254,7 @@ void main() {
   });
 
   group('onRemoteDecline', () {
-    // Bug 3: `call-declined` had no consumer at all in 0.1.4.
+    // Bug 3: `call-declined` used to have no consumer at all.
     test('arrives as a declined outcome, not a generic failure', () {
       final CallHarness harness = CallHarness();
       final String id = harness.nextId();

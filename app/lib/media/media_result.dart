@@ -105,8 +105,8 @@ final class MediaCallFailed extends MediaCallStarted {
   /// A permission refusal is the one fault whose text is *about the call* rather
   /// than about one device: a combined `getUserMedia({audio: true, video: true})`
   /// cannot say which device the OS refused, and the advice that can be right for
-  /// both is "allow the app", so this is the TypeScript original's combined
-  /// sentence, byte-identical.
+  /// both is "allow the app", so this is a single combined sentence rather than
+  /// a per-device one.
   String get message => fault.kind == MediaFaultKind.permissionDenied
       ? MediaTexts.callPermissionDenied
       : fault.message;

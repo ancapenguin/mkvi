@@ -1,10 +1,9 @@
 // Mid-call audio -> video, and the guards around it.
 //
 // The Dart transport creates an audio, a camera and a screen transceiver as
-// `sendrecv` when the peer connection is built
-// (`src/services/peer-transport.ts:78-80`), so turning the camera on mid-call is a
-// `replaceTrack` on a sender that already exists: no new call, no new id, no
-// offer, no renegotiation.
+// `sendrecv` when the peer connection is built, so turning the camera on
+// mid-call is a `replaceTrack` on a sender that already exists: no new call, no
+// new id, no offer, no renegotiation.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/call/call.dart';

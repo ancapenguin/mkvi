@@ -39,6 +39,7 @@ const List<UpdateFailure> allFailures = <UpdateFailure>[
   UpdateFailureNoArtifactForPlatform(),
   UpdateFailureLegacyKey(),
   UpdateFailureKeyUnreadable(),
+  UpdateFailureReleaseKeyMissing(),
   UpdateFailureCurrentVersionUnreadable(),
   UpdateFailureFeedUrlUnusable(),
   UpdateFailureVerificationUnavailable(),
@@ -155,6 +156,23 @@ void main() {
       );
       // And it must not accuse the user of an attack that cannot have happened.
       expect(text, isNot(contains('değiştirilmiş')));
+    });
+
+    test('and a build with no key at all says so without accusing anyone', () {
+      // Three build-time answers, three sentences, none of them a forgery
+      // report: the key is absent, the key is unreadable, the key is retired.
+      final String missing = UpdateMessage.releaseKeyMissing.text;
+      expect(missing, contains('gömülü'), reason: 'it has to say what is absent');
+      expect(
+        missing,
+        contains('derlenmemeli'),
+        reason: 'the remedy is a release build, and it belongs in the sentence',
+      );
+      expect(missing, isNot(contains('değiştirilmiş')));
+      // And it must be a different sentence from the two neighbouring key
+      // failures, or the reader is back to guessing which one happened.
+      expect(missing, isNot(UpdateMessage.keyUnreadable.text));
+      expect(missing, isNot(UpdateMessage.legacyKey.text));
     });
   });
 

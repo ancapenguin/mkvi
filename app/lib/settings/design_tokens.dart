@@ -1,24 +1,24 @@
 /// The design-token contract this layer paints from, as an interface.
 ///
-/// ## Why an interface and not an import
+/// ## Why an interface at all
 ///
 /// `design/tokens.json` is the only place a colour, a size, a radius or a
-/// duration may be written down, and its compiled form
-/// `design/generated/tokens.g.dart` is GENERATED. A library under `app/lib/`
-/// cannot reach it: the analyzer resolves a `lib/` import inside the owning
-/// package only (`'../../../design/generated/tokens.g.dart'` is refused as a
-/// file outside the package), and the route that would work -
-/// `dependencies: mkvi_design: {path: ../design}` - lives in
-/// `app/pubspec.yaml`, which this layer does not own.
-///
-/// So the split is: **the design package owns every value, this layer owns the
+/// duration may be written down, and its compiled form is GENERATED. So the
+/// split is: **the design package owns every value, this layer owns the
 /// arithmetic and the contract.** [AppearanceTokens] contains no colour, no
 /// size, no radius, no duration and not even a magic constant - it is a typed
-/// description of what the token file contains, and the single implementation
-/// of it lives next to the generated file. Swapping that one adapter for
-/// `import 'package:mkvi_design/generated/tokens.dart'` is the only change the
-/// wiring needs once the path dependency lands; nothing else in this layer
-/// moves.
+/// description of what the token file contains.
+///
+/// The interface buys one thing that a direct import of the generated file
+/// would not: the layer above this one can be tested, and reasoned about,
+/// without a Flutter binding or a token file on disk. And it buys the error
+/// contract: an id the token file does not declare is an [ArgumentError] the
+/// caller caused, while a token set missing a role it declared is a
+/// [StateError] the file caused. Those are different faults and this layer
+/// gives them different types.
+///
+/// The one implementation is `appearance_tokens_impl.dart`, in `lib/`, and it
+/// resolves everything from `package:mkvi_design/mkvi_design.dart`.
 ///
 /// Everything downstream of the interface is resolution, not invention:
 /// font scale multiplies a token size, density multiplies a token step,

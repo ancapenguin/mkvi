@@ -6,9 +6,12 @@
 /// repeated, so a change in one place cannot leave the other stale. This file owns
 /// the strings that exist only in the call state machine.
 ///
-/// Every entry carries the `file:line` it was ported from, because a Turkish
-/// string with no source is a string that will be "fixed" by someone who does not
-/// know the peer that already displays it.
+/// These strings are a compatibility surface, not decoration. Every `reason` here
+/// is put on the wire by one peer and rendered as text by the *other* one, and the
+/// button labels are what a person reads while deciding whether to accept a call.
+/// A Turkish string rewritten "to sound better" therefore breaks two things at
+/// once: a peer's decline reason, and a translated UI. Each entry below says what
+/// it is *for*, so the next reader can tell a deliberate wording from a typo.
 library;
 
 import 'package:mkvi/core/protocol/control_message.dart';
@@ -18,53 +21,55 @@ import 'package:mkvi/core/protocol/control_message.dart';
 final class CallMessages {
   const CallMessages._();
 
-  /// TS: the rejection of `requestCall` when a call is already live,
-  /// `src/services/peer-transport.ts:105`.
+  /// Refused by [CallMachine.startOutgoing] while a call is already live.
   static const String callInProgress = 'Başka bir arama zaten etkin.';
 
-  /// TS: the throw of `acceptCall` for an id the transport does not hold,
-  /// `src/services/peer-transport.ts:123`.
+  /// Refused by [CallMachine.accept] when no incoming call is ringing. Local only:
+  /// no frame carries it, because the peer is already gone.
   static const String incomingCallNotFound = 'Gelen arama bulunamadı.';
 
-  /// TS: the caller's 45 s offer timeout rejection,
-  /// `src/services/peer-transport.ts:112`.
+  /// The caller's 45 s offer timeout elapsed. Shown to the caller only; the peer
+  /// receives a `call-end` instead, and has nothing to render.
   static const String offerTimeout = 'Arama yanıtı için zaman aşımı oluştu.';
 
-  /// Not in 0.1.x, and the point of the callee-side ring timeout.
+  /// The callee-side ring timeout, and the whole point of that timer existing.
   ///
-  /// 0.1.4 had a 45 s timer on the *caller* (`CALL_OFFER_TIMEOUT_MS`) and nothing
-  /// at all on the callee, so `incomingCalls` was only ever cleared by
-  /// accept/decline/stop/close and a ringing dialog could sit on screen forever
-  /// with both buttons disabled. This is the `reason` that goes into the
-  /// `call-decline` the ring timeout sends.
+  /// A timer on the caller alone is not enough: without one on the callee, a
+  /// ringing dialog can sit on screen forever with both buttons disabled, and the
+  /// only thing that ever clears it is the user. This string is the `reason` that
+  /// goes into the `call-decline` the ring timeout sends, so the caller can tell
+  /// "she said no" from "she never heard it" — the two need different reactions
+  /// and one generic decline reason would collapse them.
   static const String ringTimeoutReason = 'Cevap verilmedi.';
 
-  /// TS: the rejection `receiveControl` produces for a `call-end`,
-  /// `src/services/peer-transport.ts:440`.
+  /// The peer ended a call that had already connected.
   static const String remoteCallEnded = 'Karşı taraf aramayı sonlandırdı.';
 
-  /// TS: the notice `App.tsx:404` showed for `remote-call-ended`.
+  /// The peer cancelled a call that had *not* connected yet. Deliberately a
+  /// different string from [remoteCallEnded]: the call never became a
+  /// conversation, so "sonlandırdı" (ended) would be a lie.
   static const String remoteCallCancelled = 'Karşı taraf aramayı bitirdi.';
 
-  /// TS: the rejection `stopCall` hands to every pending call,
-  /// `src/services/peer-transport.ts:208`.
+  /// This device hung up, after the call had connected.
   static const String callEndedLocally = 'Arama sonlandırıldı.';
 
-  /// The local user gave up on an invitation nobody answered. No TypeScript
-  /// counterpart: 0.1.x rejected the pending call with
-  /// [callEndedLocally] and let the dialog sit there.
+  /// The local user gave up on an invitation nobody answered, and the callee's
+  /// dialog is still waiting. This is *not* [callEndedLocally]: the call never
+  /// connected, and saying it was "ended" hides that the user is the one who
+  /// walked away from a ringing screen.
   static const String callCancelledLocally = 'Arama iptal edildi.';
 
-  /// TS: the decline `App.tsx:584` sends when the callee's media cannot start.
+  /// Sent as the decline `reason` when the callee's media cannot start, so the
+  /// caller learns that the refusal was technical rather than personal.
   static const String mediaUnavailable = 'Medya başlatılamadı.';
 
-  /// TS: `ChatCallWorkspace.tsx:352`, the fallback when `onStartCall` throws.
+  /// Fallback when starting the call throws.
   static const String startFailed = 'Arama başlatılamadı.';
 
-  /// TS: `ChatCallWorkspace.tsx:368`, the fallback when accepting throws.
+  /// Fallback when accepting throws.
   static const String acceptFailed = 'Arama kabul edilemedi.';
 
-  /// TS: `ChatCallWorkspace.tsx:376`, the fallback when declining throws.
+  /// Fallback when declining throws.
   static const String declineFailed = 'Arama reddedilemedi.';
 
   /// Refusal of the mid-call video upgrade while the call is not connected.
@@ -76,33 +81,36 @@ final class CallMessages {
   /// Refusal of [CallMachine.reset] while a call is still live.
   static const String callStillRunning = 'Arama hâlâ sürüyor.';
 
-  /// TS: the promise the answer dialog makes, `ChatCallWorkspace.tsx:184`.
+  /// The promise the answer dialog makes before the user accepts.
   ///
-  /// The port keeps it literally true: no `PublishMedia` action exists before
-  /// `CallMachine.accept` has emitted one.
+  /// Kept literally true: no `PublishMedia` action exists before
+  /// [CallMachine.accept] has emitted one. It is a claim about the wire, not
+  /// about the UI, and `test/call/call_incoming_test.dart` is what keeps it
+  /// honest.
   static const String mediaPromise =
       'Kabul edene kadar kamera ve mikrofonundan hiçbir şey gönderilmez.';
 
-  /// TS: the eyebrow above the answer dialog title, `ChatCallWorkspace.tsx:182`.
+  /// The eyebrow above the answer dialog title, which names the call's mode.
   static String incomingEyebrow(CallMode mode) =>
       'Gelen ${mode == CallMode.video ? 'görüntülü' : 'sesli'} arama';
 
-  /// TS: the answer dialog title, `ChatCallWorkspace.tsx:183`.
+  /// The answer dialog title. Shows the caller's name, so it is the one string
+  /// here that is a function of peer state rather than of local state.
   static String peerIsCalling(String peerName) => '$peerName arıyor';
 
-  /// TS: the accept button while the camera is being opened,
-  /// `ChatCallWorkspace.tsx:187`.
+  /// The accept button while the camera is being opened — the window in which
+  /// the promise of [mediaPromise] is being kept.
   static const String preparing = 'Hazırlanıyor…';
 
-  /// TS: the answer dialog's decline button, `ChatCallWorkspace.tsx:186`.
+  /// The answer dialog's decline button.
   static const String declineLabel = 'Reddet';
 
-  /// TS: the answer dialog's accept button, `ChatCallWorkspace.tsx:187`.
+  /// The answer dialog's accept button.
   static const String acceptLabel = 'Kabul et';
 
-  /// TS: the empty call stage caption, `ChatCallWorkspace.tsx:541`.
+  /// The empty call stage caption while an invitation is unanswered.
   static const String waitingForAnswer = 'Yanıt bekleniyor…';
 
-  /// TS: the empty call stage caption, `ChatCallWorkspace.tsx:541`.
+  /// The empty call stage caption when a call is live but nothing is being sent.
   static const String noActiveVideo = 'Aktif görüntü yok';
 }

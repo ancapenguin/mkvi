@@ -5,18 +5,29 @@
 /// use? No network, no clock, no file, no timer - it is cheap enough to run on
 /// every launch, and that is the point.
 ///
-/// It exists because of a defect that never surfaced. The key in
-/// `src-tauri/tauri.conf.json:41` decodes to minisign's retired `Ed` algorithm
-/// rather than the prehashed `ED`, so `verify_artifact`
+/// It exists because of a defect that never surfaced, and the retired 0.1.x line
+/// is the reason it is written this way.
+///
+/// The key that line shipped decodes to minisign's retired `Ed` algorithm rather
+/// than the prehashed `ED`, so `verify_artifact`
 /// (`crates/mkvi_core/src/update.rs:98`) refuses **every** signature that key can
-/// ever produce. The Tauri updater reported that refusal the way it reports any
-/// other failed verification - as a file that may have been modified - so for the
-/// whole life of the product the honest answer to "why does updating not work"
-/// was "someone tampered with your download", which is not what was happening and
-/// is not something a user can act on.
+/// ever produce - and the core hard-codes `allow_legacy = false`
+/// (`update.rs:116`), so that strictness is a decision, not an oversight.
+///
+/// Correction, 2026-09-26: this file used to claim the old Tauri updater made the
+/// same refusal and told the user their download may have been modified. It did
+/// not - `tauri-plugin-updater` 2.10.1 passes `allow_legacy = true`
+/// (`src/updater.rs:1461`) - so 0.1.x was stopped by its dead private feed, not
+/// by the key. What this preflight protects is 0.2.0 and later, where the strict
+/// core would otherwise reject every artefact an `Ed` key signs.
 ///
 /// A preflight turns that into a sentence with a fix in it, on a screen the user
-/// reaches before they ever press "check for updates".
+/// reaches before they ever press "check for updates". It also has a second job
+/// now that the two build-time values are compile-time constants: a build that
+/// was compiled without `--dart-define=MKVI_VERSION` or
+/// `--dart-define=MKVI_UPDATE_KEY_B64` arrives here with a value missing, and
+/// the honest answer is a sentence that names the build flag rather than a
+/// signature error the user cannot act on.
 library;
 
 import 'update_config.dart';
@@ -90,13 +101,25 @@ final class UpdatePreflightBlocked extends UpdatePreflight {
 
 /// Answers the preflight. Cheap, local, and safe to call on every launch.
 ///
-/// Checked in the order the cheapest and most decisive things come first: the key
-/// is a property of the build, and if it is retired then no amount of network,
-/// patience or mirroring will help.
+/// Checked in the order the cheapest and most decisive things come first. Whether
+/// a key was compiled in at all, and what shape it is, are both properties of the
+/// build rather than of the network: if either is wrong then no amount of
+/// patience, retry or mirroring will help, so both are settled before a socket is
+/// opened. The version and the feed address are checked after, and a bad value in
+/// any of the four is its own named answer.
 Future<UpdatePreflight> runUpdatePreflight({
   required UpdateConfig config,
   required SignatureVerifier verifier,
 }) async {
+  // First, and without asking anybody: is there a key at all? An empty value is
+  // not a key that fails to verify, it is a build that was compiled without the
+  // flag. Answering that with `UpdateFailureKeyUnreadable` would be a guess, and
+  // answering it by calling the verifier would hand the question to a bridge
+  // that is not there yet - which reports "verification unavailable" and sends
+  // the reader after the wrong problem entirely.
+  if (!config.hasReleaseKey) {
+    return const UpdatePreflightBlocked(UpdateFailureReleaseKeyMissing());
+  }
   final ReleaseKeyState key = await verifier.classifyKey(config.publicKeyB64);
   switch (key) {
     case ReleaseKeyUnavailable():

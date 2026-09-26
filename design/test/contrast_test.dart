@@ -13,7 +13,7 @@
 //   * a required pair is missing from the list, so the gate cannot be quietly
 //     weakened by deleting a line from tokens.json,
 //   * the stage is not dark with light text in every theme,
-//   * generated/tokens.g.dart is stale, i.e. somebody edited tokens.json
+//   * lib/generated/tokens.g.dart is stale, i.e. somebody edited tokens.json
 //     without re-running the generator.
 
 import 'dart:convert';
@@ -357,10 +357,10 @@ void main() {
       expect(second, first, reason: 'The generator must not depend on run order or timing.');
     });
 
-    test('writes generated/tokens.g.dart and it is up to date', () {
-      final committed = File('${packageRoot.path}/generated/tokens.g.dart');
+    test('writes lib/generated/tokens.g.dart and it is up to date', () {
+      final committed = File('${packageRoot.path}/lib/generated/tokens.g.dart');
       expect(committed.existsSync(), isTrue,
-          reason: 'generated/tokens.g.dart is missing. Run: dart run tool/generate_tokens.dart');
+          reason: 'lib/generated/tokens.g.dart is missing. Run: dart run tool/generate_tokens.dart');
 
       final temp = File('${Directory.systemTemp.path}'
           'mkvi_tokens_check_${pid}_$counter.g.dart');
@@ -378,7 +378,7 @@ void main() {
         final existing = committed.readAsBytesSync();
         final difference = _describeDifference(fresh, existing);
         expect(difference, isNull,
-            reason: 'generated/tokens.g.dart is stale: $difference\n'
+            reason: 'lib/generated/tokens.g.dart is stale: $difference\n'
                 'tokens.json and the generated Dart must agree. '
                 'Run: dart run tool/generate_tokens.dart');
       } finally {
@@ -394,6 +394,73 @@ void main() {
         expect(source, contains('Color(${colour.toDartLiteral()}), // surface ($themeId/$accentId'),
             reason: 'Missing the "token (theme/accent)" comment for $themeId.');
       }
+    });
+
+    test('exports what a consumer cannot derive from a colour', () {
+      // The app used to read these back out of tokens.json through dart:io,
+      // which throws in a packaged app that has no token file. Each one is now
+      // emitted, and this is what stops a later "simplification" of
+      // generateDart() from quietly deleting one and putting the file read
+      // back into production.
+      final source = generateDart(spec);
+
+      // The gate's own input.
+      for (final pair in spec.contrastList) {
+        expect(source, contains("foregroundRole: '${pair.fg}',"),
+            reason: 'The contrast list is missing the ${pair.fg} on ${pair.bg} pair.');
+        expect(source, contains("backgroundRole: '${pair.bg}',"),
+            reason: 'The contrast list is missing the ${pair.fg} on ${pair.bg} pair.');
+        expect(source, contains('minimum: ${_dartText(pair.min)},'),
+            reason: 'The ${pair.fg} on ${pair.bg} pair lost its minimum.');
+      }
+      expect(_occurrences(source, 'MkviContrastRequirement('), spec.contrastList.length + 1,
+          reason: 'The contrast list must be emitted exactly once, in order.');
+
+      // Per theme: polarity and the three derive amounts.
+      for (final themeId in spec.themeIds) {
+        final target = tryParseColor(spec.themeDerive(themeId)['focusRingTarget'] as String?)!;
+        expect(source, contains('focusRingTarget: Color(${target.toDartLiteral()}),'),
+            reason: 'Theme $themeId does not export its focusRingTarget.');
+        expect(source, contains('isDark: ${spec.isDarkTheme(themeId)},'),
+            reason: 'Theme $themeId does not export its polarity.');
+        expect(source, contains('focusRingMix: ${_dartText(spec.themeMix(themeId, 'focusRingMix'))},'),
+            reason: 'Theme $themeId does not export its focusRingMix.');
+        expect(source, contains('accentSoftMix: ${_dartText(spec.themeMix(themeId, 'accentSoftMix'))},'),
+            reason: 'Theme $themeId does not export its accentSoftMix.');
+      }
+
+      // The radius presets, which the app used to type out beside the generated
+      // file instead of reading.
+      for (final preset in (spec.radius['presets'] as Map<String, dynamic>).keys) {
+        expect(source, contains("const mkviRadii${_pascal(preset)} = MkviRadii("),
+            reason: 'Radius preset $preset is not emitted.');
+      }
+      expect(source, contains('const List<String> mkviRadiusPresets ='),
+          reason: 'The radius preset NAMES are not exported.');
+    });
+
+    test('rejects a theme whose derive block cannot be exported', () {
+      // A focus ring target that is a role name instead of a colour has no
+      // single value per theme, so it cannot become a generated constant. That
+      // must be a token error, not a constant that lies.
+      final broken = _mutate((json) {
+        (json['themes']['midnight'] as Map<String, dynamic>)['derive']['focusRingTarget'] = 'text';
+      });
+      expect(_expectTokenError(broken), contains('focusRingTarget'));
+    });
+
+    test('rejects a derive mix amount outside 0.0..1.0', () {
+      final broken = _mutate((json) {
+        (json['themes']['light'] as Map<String, dynamic>)['derive']['accentSoftMix'] = 1.4;
+      });
+      expect(_expectTokenError(broken), contains('accentSoftMix'));
+    });
+
+    test('rejects a theme with no polarity', () {
+      final broken = _mutate((json) {
+        (json['themes']['plum'] as Map<String, dynamic>)['polarity'] = 'dim';
+      });
+      expect(_expectTokenError(broken), contains('polarity'));
     });
   });
 }
@@ -415,6 +482,36 @@ String _expectTokenError(String source) {
   }
   throw StateError('Expected the token file to be rejected, but it was accepted.');
 }
+
+/// How many times [needle] appears in [haystack]. Used to assert a list was
+/// emitted exactly once rather than at least once.
+int _occurrences(String haystack, String needle) {
+  var count = 0;
+  var index = haystack.indexOf(needle);
+  while (index != -1) {
+    count++;
+    index = haystack.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+/// The same number spelling the generator emits, so the assertions above do not
+/// encode a second, drifting idea of how a double is formatted.
+String _dartText(num value) {
+  var text = value.toStringAsFixed(4);
+  while (text.contains('.') && text.endsWith('0')) {
+    text = text.substring(0, text.length - 1);
+  }
+  if (text.endsWith('.')) text = text.substring(0, text.length - 1);
+  return text;
+}
+
+/// `cozy` -> `Cozy`: the generated constant's own name for a preset.
+String _pascal(String value) => value
+    .split(RegExp(r'[^A-Za-z0-9]'))
+    .where((part) => part.isNotEmpty)
+    .map((part) => part[0].toUpperCase() + part.substring(1))
+    .join();
 
 /// Returns null when the byte lists are equal, otherwise a short description of
 /// the first difference.

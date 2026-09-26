@@ -6,13 +6,12 @@
 /// is a **return value**, not an exception carrying a user-facing string from a
 /// foreign layer.
 ///
-/// `peer-transport.ts` threw `new Error("Doğrudan bağlantı henüz hazır değil.")`
-/// and `App.tsx` caught it and read `error.message` to fill a Turkish notice box.
-/// That works only as long as every producer of the exception is Turkish, which
-/// is exactly the assumption that produced the mixed-language UI. Here a refusal
-/// carries [ChatChannelBinding.unavailableReason], a Turkish string the chat
-/// layer itself chose, and the transport only has to say *which* of the two
-/// reasons applies.
+/// The tempting alternative is to throw, let the UI catch and read
+/// `error.message`. That works only as long as every producer of the exception is
+/// Turkish, which is exactly the assumption that produces a mixed-language UI the
+/// moment one layer is written in another language. Here a refusal carries
+/// [ChatChannelBinding.unavailableReason], a Turkish string the chat layer itself
+/// chose, and the transport only has to say *which* of the two reasons applies.
 library;
 
 import 'package:mkvi/core/protocol/control_message.dart';

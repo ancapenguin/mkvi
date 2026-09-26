@@ -1,6 +1,6 @@
 // Generator for the mkvi design tokens.
 //
-//   dart run tool/generate_tokens.dart                 # -> generated/tokens.g.dart
+//   dart run tool/generate_tokens.dart                 # -> lib/generated/tokens.g.dart
 //   dart run tool/generate_tokens.dart --out <path>    # -> <path>
 //   dart run tool/generate_tokens.dart --report        # print the contrast table
 //   dart run tool/generate_tokens.dart --check         # fail if the output is stale
@@ -11,14 +11,29 @@
 // a declared order, there are no timestamps and no map-iteration order in the
 // output, and lines are always LF.
 //
+// The output lands in `lib/` ON PURPOSE: the package is a real Dart library
+// (`design/lib/mkvi_design.dart` re-exports the generated file), so `app` can
+// take it as a path dependency and reach the tokens as
+// `package:mkvi_design/mkvi_design.dart` without copying anything. A generated
+// file outside `lib/` would be unreachable from any other package, which is
+// exactly the defect that left the token implementation in the test tree.
+//
+// The emitted file is therefore not only the colours. It also carries the
+// VALUES A CONSUMER CANNOT DERIVE FROM A COLOUR: the `contrast` list, each
+// theme's polarity, and each theme's `derive` amounts. A consumer that had to
+// re-read tokens.json for those had a `dart:io` file read on a production code
+// path, where a packaged app has no tokens.json at all. What the file declares
+// is emitted; what would be invented is not.
+//
 // The script is also the single implementation of token resolution: the
 // contrast test imports this file so the gate can never measure something
 // different from what was generated.
 //
 // It fails loudly (exit code 2, one problem per line) when a theme is missing a
 // role, when a role set differs between themes, when an unknown role is
-// referenced, or when a derived role disagrees with the value cached in the
-// theme it was derived from.
+// referenced, when a derived role disagrees with the value cached in the theme
+// it was derived from, or when a value the generated file has to export per
+// theme is missing or has the wrong type.
 
 import 'dart:convert';
 import 'dart:io';
@@ -226,6 +241,45 @@ class TokenSpec {
   Map<String, dynamic> themeDerive(String themeId) =>
       _map(themes[themeId] as Map<String, dynamic>, 'derive');
 
+  /// `themes.<id>.polarity`. Only `dark` and `light` are accepted, because the
+  /// generated file turns it into a boolean and a third spelling would be
+  /// silently treated as light.
+  String themePolarity(String themeId) =>
+      (themes[themeId] as Map<String, dynamic>)['polarity'] as String? ?? '';
+
+  /// `themes.<id>.polarity == 'dark'`.
+  bool isDarkTheme(String themeId) => themePolarity(themeId) == 'dark';
+
+  /// `themes.<id>.derive.focusRingTarget` as a literal colour.
+  ///
+  /// It has to be a literal: a custom accent's focus ring is mixed towards this
+  /// colour, so a value that depended on the accent would not be one colour at
+  /// all and could not be exported per theme.
+  Rgb themeFocusRingTarget(String themeId) {
+    final value = themeDerive(themeId)['focusRingTarget'];
+    final parsed = tryParseColor(value as String?);
+    if (parsed == null) {
+      throw TokenError([
+        'Theme "$themeId" derive["focusRingTarget"] is $value. It must be a '
+            'literal #RRGGBB or #RRGGBBAA colour, because the generated tokens '
+            'export one focus ring target per theme.',
+      ]);
+    }
+    return parsed;
+  }
+
+  /// `themes.<id>.derive.<key>` as a `color-mix` amount in 0.0..1.0.
+  double themeMix(String themeId, String key) {
+    final value = themeDerive(themeId)[key];
+    if (value is! num || value.toDouble() < 0.0 || value.toDouble() > 1.0) {
+      throw TokenError([
+        'Theme "$themeId" derive["$key"] is $value. It must be a number within '
+            '0.0..1.0, because the generated tokens export it as a mix amount.',
+      ]);
+    }
+    return value.toDouble();
+  }
+
   String themeLabel(String themeId) =>
       (themes[themeId] as Map<String, dynamic>)['labelTr'] as String? ?? themeId;
 
@@ -387,6 +441,7 @@ class TokenSpec {
     }
 
     _validateScales(problems);
+    _validateThemeMetadata(problems);
 
     if (problems.isNotEmpty) {
       throw TokenError(['$origin: ${problems.length} problem(s) found.', ...problems]);
@@ -422,6 +477,61 @@ class TokenSpec {
         }
       default:
         problems.add('meta.sources["$role"].$slot has unknown kind "${operand['kind']}".');
+    }
+  }
+
+  /// The per-theme values the generated file exports verbatim, because a
+  /// consumer cannot derive them from a colour: the polarity, and the three
+  /// `derive` amounts a CUSTOM accent is built with.
+  ///
+  /// They are checked here rather than while emitting, so a broken value is a
+  /// token error with a message naming the theme - not a generator crash on a
+  /// file somebody else has to debug.
+  void _validateThemeMetadata(List<String> problems) {
+    for (final themeId in themeIds) {
+      final polarity = themePolarity(themeId);
+      if (polarity != 'dark' && polarity != 'light') {
+        problems.add(
+          'Theme "$themeId" polarity is "$polarity"; it must be "dark" or '
+          '"light".',
+        );
+      }
+      final derive = themeDerive(themeId);
+      final target = derive['focusRingTarget'];
+      if (tryParseColor(target as String?) == null) {
+        problems.add(
+          'Theme "$themeId" derive["focusRingTarget"] is $target. It must be a '
+          'literal #RRGGBB or #RRGGBBAA colour: a custom accent mixes towards '
+          'it, so it cannot depend on the accent.',
+        );
+      }
+      for (final key in const ['focusRingMix', 'accentSoftMix']) {
+        final value = derive[key];
+        if (value is! num || value.toDouble() < 0.0 || value.toDouble() > 1.0) {
+          problems.add(
+            'Theme "$themeId" derive["$key"] is $value. It must be a number '
+            'within 0.0..1.0, i.e. a color-mix amount.',
+          );
+        }
+      }
+      // Any other derive key is still emitted, so a key with neither type is a
+      // broken token file rather than a value silently dropped on the floor.
+      for (final entry in derive.entries) {
+        if (const ['focusRingTarget', 'focusRingMix', 'accentSoftMix']
+            .contains(entry.key)) {
+          continue;
+        }
+        final isColour = tryParseColor(entry.value as String?) != null;
+        final isAmount = entry.value is num &&
+            entry.value.toDouble() >= 0.0 &&
+            entry.value.toDouble() <= 1.0;
+        if (!isColour && !isAmount) {
+          problems.add(
+            'Theme "$themeId" derive["${entry.key}"] is ${entry.value}. A '
+            'derive key must be a #RRGGBB colour or a number within 0.0..1.0.',
+          );
+        }
+      }
     }
   }
 
@@ -708,6 +818,99 @@ String generateDart(TokenSpec spec) {
   writeln('}');
   writeln();
 
+  // -- theme metadata --------------------------------------------------------
+  // A theme carries more than colours: a polarity, and the three derive
+  // amounts a CUSTOM accent is built with. The colours alone cannot express
+  // them, so the file has to export them or a consumer has to re-read
+  // tokens.json from disk, which a packaged app does not have.
+  writeln('/// The per-theme values that are not colours.');
+  writeln('///');
+  writeln('/// `polarity` drives light/dark selection; the three `derive` amounts');
+  writeln('/// are how a custom accent is derived with the same arithmetic the');
+  writeln('/// generator used for `accentSoft` and `focusRing`.');
+  writeln('class MkviThemeMeta {');
+  writeln('  const MkviThemeMeta({');
+  writeln('    required this.isDark,');
+  writeln('    required this.focusRingTarget,');
+  writeln('    required this.focusRingMix,');
+  writeln('    required this.accentSoftMix,');
+  writeln('  });');
+  writeln();
+  writeln('  /// `themes.<id>.polarity == \'dark\'.');
+  writeln('  final bool isDark;');
+  writeln('  /// `themes.<id>.derive.focusRingTarget`.');
+  writeln('  final Color focusRingTarget;');
+  writeln('  /// `themes.<id>.derive.focusRingMix`.');
+  writeln('  final double focusRingMix;');
+  writeln('  /// `themes.<id>.derive.accentSoftMix`.');
+  writeln('  final double accentSoftMix;');
+  writeln('}');
+  writeln();
+  writeln('/// Every theme\'s non-colour declarations, keyed by theme.');
+  writeln('const Map<MkviThemeId, MkviThemeMeta> mkviThemeMeta =');
+  writeln('    <MkviThemeId, MkviThemeMeta>{');
+  for (final id in spec.themeIds) {
+    final target = spec.themeFocusRingTarget(id);
+    writeln('  MkviThemeId.$id: MkviThemeMeta(');
+    writeln('    isDark: ${spec.isDarkTheme(id)},');
+    writeln('    focusRingTarget: Color(${target.toDartLiteral()}),');
+    writeln('    focusRingMix: ${_dartDouble(spec.themeMix(id, 'focusRingMix'))},');
+    writeln('    accentSoftMix: ${_dartDouble(spec.themeMix(id, 'accentSoftMix'))},');
+    writeln('  ),');
+  }
+  writeln('};');
+  writeln();
+  writeln('/// The metadata of one theme.');
+  writeln('///');
+  writeln('/// Throws [ArgumentError] for an id no theme declares, so an unknown');
+  writeln('/// theme is a caller error rather than a silent null.');
+  writeln('MkviThemeMeta mkviMetaFor(MkviThemeId theme) {');
+  writeln('  final meta = mkviThemeMeta[theme];');
+  writeln('  if (meta == null) {');
+  writeln('    throw ArgumentError.value(theme, \'theme\', \'Unknown theme\');');
+  writeln('  }');
+  writeln('  return meta;');
+  writeln('}');
+  writeln();
+
+  // -- the accessibility gate, as data --------------------------------------
+  // The `contrast` list is the gate's input. Emitting it means a consumer can
+  // run the SAME gate on a custom accent or a high-contrast palette, instead
+  // of hard-coding the minimums it remembers.
+  writeln('/// One declared contrast requirement: `fg` on `bg` must reach `min`.');
+  writeln('class MkviContrastRequirement {');
+  writeln('  const MkviContrastRequirement({');
+  writeln('    required this.foregroundRole,');
+  writeln('    required this.backgroundRole,');
+  writeln('    required this.minimum,');
+  writeln('  });');
+  writeln();
+  writeln('  /// Role painted on top.');
+  writeln('  final String foregroundRole;');
+  writeln('  /// Role painted underneath.');
+  writeln('  final String backgroundRole;');
+  writeln('  /// The WCAG 2.x ratio the pair must reach.');
+  writeln('  final double minimum;');
+  writeln();
+  writeln('  @override');
+  writeln('  String toString() =>');
+  writeln("      '\$foregroundRole on \$backgroundRole >= \$minimum';");
+  writeln('}');
+  writeln();
+  writeln('/// The `contrast` list, in declaration order. The whole gate is here:');
+  writeln('/// a pair missing from this list is a pair nobody is checking.');
+  writeln('const List<MkviContrastRequirement> mkviContrastRequirements =');
+  writeln('    <MkviContrastRequirement>[');
+  for (final pair in spec.contrastList) {
+    writeln('  MkviContrastRequirement(');
+    writeln("    foregroundRole: '${_dartString(pair.fg)}',");
+    writeln("    backgroundRole: '${_dartString(pair.bg)}',");
+    writeln('    minimum: ${_dartDouble(pair.min)},');
+    writeln('  ),');
+  }
+  writeln('];');
+  writeln();
+
   // -- role enum ------------------------------------------------------------
   writeln('/// Every colour role. A theme MUST define all of them; the token gate');
   writeln('/// fails the build otherwise.');
@@ -933,6 +1136,26 @@ String generateDart(TokenSpec spec) {
   }
   writeln("const mkviRadii = mkviRadii${_pascal(spec.radius['defaultPreset'] as String)};");
   writeln();
+  writeln('/// The radius presets, in declaration order. A consumer offers these');
+  writeln('/// names; it does not type its own list beside them.');
+  writeln('const List<String> mkviRadiusPresets = ${_dartStringList(radiusPresets.keys.toList(growable: false))};');
+  writeln();
+  writeln('/// The radii of one declared preset.');
+  writeln('MkviRadii mkviRadiiFor(String preset) => switch (preset) {');
+  for (final preset in radiusPresets.keys) {
+    writeln("  '$preset' => mkviRadii${_pascal(preset)},");
+  }
+  writeln("  _ => throw ArgumentError.value(preset, 'preset', 'Unknown radius preset'),");
+  writeln('};');
+  writeln();
+  writeln('/// Every radius step, keyed by its token name (none .. pill).');
+  writeln('Map<String, double> mkviRadiusSteps(MkviRadii radii) =>');
+  writeln('    <String, double>{');
+  for (final name in radiusStepNames) {
+    writeln("      '$name': radii.${_camel(name)},");
+  }
+  writeln('    };');
+  writeln();
 
   // -- motion ---------------------------------------------------------------
   writeln('/// Durations and the single easing curve used across the app.');
@@ -971,6 +1194,18 @@ String generateDart(TokenSpec spec) {
     writeln('  $name: Duration(milliseconds: ${durations[name]}),');
   }
   writeln(');');
+  writeln();
+  writeln('/// The duration names, in declaration order.');
+  writeln('const List<String> mkviMotionNames = ${_dartStringList(durationNames)};');
+  writeln();
+  writeln('/// Every duration, keyed by its token name. `instant` is what reduced');
+  writeln('/// motion replaces every other duration with, so it is looked up by');
+  writeln('/// name rather than as a literal zero.');
+  writeln('const Map<String, Duration> mkviMotionDurations = <String, Duration>{');
+  for (final name in durationNames) {
+    writeln("  '$name': Duration(milliseconds: ${durations[name]}),");
+  }
+  writeln('};');
   writeln();
 
   // -- controls -------------------------------------------------------------
@@ -1053,6 +1288,19 @@ String generateDart(TokenSpec spec) {
     writeln('  ),');
   }
   writeln(');');
+  writeln();
+  writeln('/// The control size names, in declaration order.');
+  writeln('const List<String> mkviControlSizeNames = ${_dartStringList(sizes.map((s) => s.name).toList(growable: false))};');
+  writeln();
+  // A function, not a const map: a `const` variable's field cannot be read in
+  // a const expression, and the same is true for the radii steps above.
+  writeln('/// Every control size at density 1.0, keyed by its token name.');
+  writeln('Map<String, MkviControlSize> mkviControlSizes() =>');
+  writeln('    <String, MkviControlSize>{');
+  for (final size in sizes) {
+    writeln("      '${size.name}': mkviControls.${size.name},");
+  }
+  writeln('    };');
   writeln();
 
   // -- tokens ---------------------------------------------------------------
@@ -1272,7 +1520,7 @@ const _usage = '''
 Usage: dart run tool/generate_tokens.dart [options]
 
   --out <path>      Where to write the generated Dart file.
-                    Default: design/generated/tokens.g.dart
+                    Default: design/lib/generated/tokens.g.dart
   --tokens <path>   Token source. Default: design/tokens.json
   --report          Print the contrast table (markdown) instead of writing.
   --check           Do not write; exit 3 if the existing output is out of date.
@@ -1321,7 +1569,9 @@ int runGenerator(List<String> arguments) {
   final scriptPath = Platform.script.toFilePath();
   final packageRoot = File(scriptPath).parent.parent.path;
   final source = File(tokensPath ?? '$packageRoot/tokens.json');
-  final target = File(outPath ?? '$packageRoot/generated/tokens.g.dart');
+  // The default output is INSIDE `lib/`, so the design package is a library
+  // another package can depend on. See the header comment.
+  final target = File(outPath ?? '$packageRoot/lib/generated/tokens.g.dart');
 
   if (!source.existsSync()) {
     stderr.writeln('Token file not found: ${source.path}');

@@ -1,15 +1,10 @@
 /// How a call finished, as a value the UI can branch on.
 ///
-/// The four live bugs include one that is *entirely* about this file: 0.1.4
-/// declared `call-declined` in `PeerTransportEvent`, the transport emitted it, and
-/// **no branch anywhere consumed it** — the caller only learned about a decline
-/// through the rejection of the `requestCall` promise, which `App.tsx` turned into
-/// a media error. So a decline, a timeout and a transport failure all arrived as
-/// "an error happened".
-///
-/// [CallDeclined] exists to make that impossible to write by accident: a decline
-/// is a *result*, not an exception, it is its own type, and it is not
-/// [CallFailed].
+/// A decline, a timeout and a transport failure are three different facts, and a
+/// caller needs to react to each differently: one is a person saying no, one is
+/// silence, one is something breaking. This hierarchy exists to make collapsing
+/// them into "an error happened" impossible to write by accident — [CallDeclined]
+/// is a *result*, its own type, and is not [CallFailed].
 library;
 
 import 'call_messages.dart';
@@ -34,8 +29,6 @@ sealed class CallOutcome {
 
 /// The peer accepted the invitation. Not an ending: the call goes on to
 /// [CallStatus.connecting] and then [CallStatus.connected].
-///
-/// TS: the `resolve(id)` of the `requestCall` promise, `peer-transport.ts:430`.
 final class CallAccepted extends CallOutcome {
   const CallAccepted({required this.id, required this.at});
 
@@ -62,9 +55,8 @@ final class CallAccepted extends CallOutcome {
 
 /// The peer sent `call-decline`.
 ///
-/// **Not** a failure: the person on the other end pressed "Reddet". TS: the
-/// `call-decline` case of `receiveControl`, `peer-transport.ts:433-438`, whose
-/// `emit({ type: "call-declined", ... })` no consumer handled.
+/// **Not** a failure: the person on the other end pressed "Reddet", and the UI
+/// must not present that as a broken microphone.
 final class CallDeclined extends CallOutcome {
   const CallDeclined({
     required this.id,
@@ -79,7 +71,8 @@ final class CallDeclined extends CallOutcome {
   final DateTime at;
 
   /// The peer's reason, or [PeerProtocol.defaultCallDeclineReason] when the frame
-  /// carried none — the same fallback `receiveControl` uses.
+  /// carried none. The wire parser has already scrubbed and capped whatever
+  /// arrived, so this needs no further checking.
   final String reason;
 
   @override
@@ -103,8 +96,10 @@ final class CallDeclined extends CallOutcome {
 /// Nobody answered within the timeout.
 ///
 /// [offeredByUs] is the only thing that distinguishes the caller's 45 s
-/// `CALL_OFFER_TIMEOUT_MS` from the callee's 45 s ring timeout, and it is exactly
-/// the distinction 0.1.x could not draw because it had only one of the two.
+/// [CallMachine.callOfferTimeout] from the callee's 45 s
+/// [CallMachine.callRingTimeout], and both are 45 s on purpose. Without it the two
+/// would be one outcome with two different notices, and a caller could not tell
+/// from its history whether *it* was left waiting or *the other side* was.
 final class CallTimedOut extends CallOutcome {
   const CallTimedOut({
     required this.id,
@@ -148,10 +143,8 @@ final class CallTimedOut extends CallOutcome {
       'offeredByUs=$offeredByUs)';
 }
 
-/// The peer hung up while the invitation was still unanswered.
-///
-/// TS: the `call-end` case of `receiveControl` reaching a call that had not
-/// connected, `peer-transport.ts:439-445`.
+/// The peer hung up while the invitation was still unanswered. Distinct from
+/// [CallEndedByRemote] because nothing was ever said on this call.
 final class CallCancelledByRemote extends CallOutcome {
   const CallCancelledByRemote({required this.id, required this.at});
 
@@ -240,9 +233,9 @@ final class CallEndedLocally extends CallOutcome {
 /// The call could not be made: the capture failed, the transport refused to send,
 /// the channel closed mid-call.
 ///
-/// This is the bucket 0.1.4 put *everything* into, which is why a decline looked
-/// like a broken microphone. A decline is [CallDeclined]; only a genuine failure
-/// is this.
+/// This is the bucket for genuine breakage only. A decline is [CallDeclined] and
+/// a silence is [CallTimedOut]; neither of those is a failure, and routing them
+/// through here is exactly what makes a "Reddet" look like a broken microphone.
 final class CallFailed extends CallOutcome {
   const CallFailed({required this.id, required this.at, required this.reason});
 

@@ -45,10 +45,12 @@ abstract class InstallerLauncher {
 
 /// The production launcher: run the file.
 ///
-/// Tauri published `installMode: passive` (`src-tauri/tauri.conf.json:45-47`),
-/// which is what the artefact expects to be run as; the process is started
-/// detached and this call does not wait for it, because an installer that
-/// replaces the running application cannot be waited on.
+/// The artefact is a plain installer, so the process is started detached and
+/// this call does not wait for it: an installer that replaces the running
+/// application cannot be waited on, and the app is expected to exit while it
+/// runs. Nothing here is passed to the installer - no arguments, no flags, no
+/// environment - because a verified file is already the whole job and anything
+/// added to the command line is something a user cannot audit.
 final class ProcessInstallerLauncher implements InstallerLauncher {
   const ProcessInstallerLauncher();
 

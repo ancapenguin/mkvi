@@ -15,6 +15,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/update/update_client.dart';
+import 'package:mkvi/update/update_config.dart';
 import 'package:mkvi/update/update_fetcher.dart';
 import 'package:mkvi/update/update_failure.dart';
 import 'package:mkvi/update/update_file_store.dart';
@@ -493,20 +494,36 @@ void main() {
   });
 
   group('the feed itself', () {
-    test(
-      'a 404 - the endpoint this product shipped with - is unreachable',
-      () async {
-        final UpdateHarness harness = UpdateHarness(feedUrl: deadFeedUrl);
-        addTearDown(harness.dispose);
-        // What a 404 looks like through the transport seam: a failed read.
-        harness.fetcher.feed = const FeedReadFailed('http 404');
+    test('a 404 is unreachable, not a malformed manifest', () async {
+      // A release with no artefact attached to it, and the everyday answer of
+      // 0.1.x: a feed nobody could read answered 404 forever. Either way it is a
+      // transport failure, and the address asked is the release endpoint.
+      final UpdateHarness harness = UpdateHarness();
+      addTearDown(harness.dispose);
+      harness.fetcher.feed = const FeedReadFailed('http 404');
 
-        final UpdateReport report = await harness.client.check();
-        expect(harness.failureOf(report), isA<UpdateFailureFeedUnreachable>());
-        expect(report.message, UpdateMessage.feedUnreachable.text);
-        expect(harness.fetcher.readUrls.single.toString(), deadFeedUrl);
-      },
-    );
+      final UpdateReport report = await harness.client.check();
+      expect(harness.failureOf(report), isA<UpdateFailureFeedUnreachable>());
+      expect(report.message, UpdateMessage.feedUnreachable.text);
+      expect(harness.fetcher.readUrls.single, releaseFeedUrl);
+      expect(
+        harness.fetcher.downloadUrls,
+        isEmpty,
+        reason: 'nothing to download from a feed that was not there',
+      );
+    });
+
+    test('and the release endpoint is the only one a shipped build reads', () async {
+      // The harness default is the production address, so every other test in
+      // this file is already asking the same question. Asserted once, here, so
+      // a change to the address cannot pass quietly through the rest.
+      final UpdateHarness harness = UpdateHarness();
+      addTearDown(harness.dispose);
+      harness.fetcher.feed = const FeedReadOk(body: <int>[0x6e], declaredLength: null);
+
+      await harness.client.check();
+      expect(harness.fetcher.readUrls, <Uri>[releaseFeedUrl]);
+    });
 
     test('a transport that throws is unreachable, not a crash', () async {
       final UpdateHarness harness = UpdateHarness();

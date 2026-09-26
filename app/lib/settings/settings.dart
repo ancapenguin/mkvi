@@ -25,6 +25,7 @@ library;
 export 'appearance_resolver.dart';
 export 'appearance_settings.dart';
 export 'appearance_style.dart';
+export 'appearance_tokens_impl.dart';
 export 'app_settings.dart';
 export 'connection_settings.dart';
 export 'contrast.dart';

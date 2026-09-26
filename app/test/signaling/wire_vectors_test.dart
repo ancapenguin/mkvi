@@ -1,9 +1,27 @@
-/// Every case of `vectors/wire-v1.json`, run against the Dart signaling port.
+/// Every case of `vectors/wire-v1.json`, run against this signaling client.
 ///
-/// The TypeScript suite `src/services/signaling-vectors.test.ts` reads the same
-/// file. Neither side may add a case the other cannot run, and neither may pass by
-/// weakening an expectation: the two known TypeScript violations are recorded as
-/// xfail-style `xfail` counters in the report instead of being deleted here.
+/// ## The contract is now single-sided, and that is a deliberate loss
+///
+/// This file used to be one of two suites reading the same vector file; the
+/// other was a TypeScript suite that has since been deleted along with the rest
+/// of the 0.1.x line. So the file is no longer a two-sided agreement — it is now
+/// the only executable statement of what the wire format is. Nothing else in the
+/// repository re-checks it.
+///
+/// What is *not* lost is why it exists. The vector file was written to catch two
+/// real production defects, and both of them are still live hazards:
+///
+/// * the base64 alphabet — identity material once went out in the standard
+///   alphabet (`+`, `/`) where the Worker accepts only base64url, which killed
+///   the large majority of pairings silently at identity exchange;
+/// * the transfer-id format — a hyphenated UUID was once used where the parser
+///   requires 32 bare hex characters, and *no message ever arrived*.
+///
+/// A single-sided contract is a weaker guarantee than a two-sided one, and it is
+/// still worth far more than the comment it replaced. The fix is not to relax the
+/// expectations: every case here is an assertion, and a case may not be deleted
+/// or weakened to make the suite pass. `vectors/README.md` is where the contract
+/// itself is described.
 library;
 
 import 'package:flutter_test/flutter_test.dart';

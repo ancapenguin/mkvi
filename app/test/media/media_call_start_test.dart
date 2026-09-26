@@ -12,10 +12,10 @@ import 'support/media_fakes.dart';
 
 void main() {
   group('a video call the camera cannot serve', () {
-    // Pins ChatCallWorkspace.tsx:317 — the third rung `{audio: true, video: false}`
-    // and its warning "Kamera bulunamadı; arama yalnızca sesli başlayacak." A user
-    // who pressed the video button got a silent audio call and one line of text
-    // that said so. This is the port's answer: report, do not downgrade.
+    // The third rung `{audio: true, video: false}` and its warning "Kamera
+    // bulunamadı; arama yalnızca sesli başlayacak." were the shape of this
+    // defect: a user who pressed the video button got a silent audio call and one
+    // line of text that said so. This is the answer: report, do not downgrade.
     test('reports instead of degrading to audio', () async {
       // No camera and no microphone enumerated, and the OS hands back nothing for
       // either rung. Note that nothing *throws* here: a missing device resolves
@@ -99,7 +99,7 @@ void main() {
   group('a microphone that will not open during a video call', () {
     // Rung 2 of the ladder, and the one degradation that is still allowed
     // because its effect is visible: the video the user asked for is still going
-    // out. Pins ChatCallWorkspace.tsx:316, warning text byte-identical.
+    // out. The warning text is byte-identical to the rung's own string.
     test('degrades to video-only and says so', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);
@@ -156,9 +156,9 @@ void main() {
   });
 
   group('a permission refusal', () {
-    // ChatCallWorkspace.tsx:330-331 named one sentence for a combined refusal.
-    // A combined `getUserMedia({audio: true, video: true})` cannot say which
-    // device the OS refused, so the call-level failure uses the combined advice.
+    // One sentence for a combined refusal. A combined
+    // `getUserMedia({audio: true, video: true})` cannot say which device the OS
+    // refused, so the call-level failure uses the combined advice.
     test('is reported with the combined Turkish sentence', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);
@@ -361,8 +361,8 @@ void main() {
   });
 
   group('the transceivers', () {
-    // peer-transport.ts:76-80. Order and identity are the contract: the screen
-    // sender must never stand in for the camera one.
+    // Order and identity are the contract: the screen sender must never stand in
+    // for the camera one.
     test('are created once, in order, and renegotiate exactly once', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);

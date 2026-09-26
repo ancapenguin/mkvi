@@ -1,9 +1,9 @@
 // The conversation as a value: order, grouping, day boundaries, the window, and
 // paging.
 //
-// Each test names the live defect it pins. The defects are real: `App.tsx` held
-// `useState<ChatMessage[]>([])` and appended to it forever, so the four properties
-// below were not merely missing, they were all *absent* from the shipped build.
+// Each test names the defect it pins. The defects are real: the conversation was
+// once an append-only list in mutable state, so the four properties below were
+// not merely untested — they were all absent from the shipped build.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mkvi/chat/chat.dart';

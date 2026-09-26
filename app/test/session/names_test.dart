@@ -1,22 +1,21 @@
 /// BUG 2, the alias that ate the peer's real name.
 ///
-/// `src/App.tsx:119` was
+/// The primary name used to be one expression:
 ///
 /// ```ts
 /// const peerName = peerAlias || peerAnnouncedName || defaultPeerName;
 /// ```
 ///
 /// so a purely local annotation outranked the name the peer published about
-/// itself. Worse, `src/components/ChatCallWorkspace.tsx:490` computed
-/// `aliasIsSet = Boolean(peerAnnouncedName && peerAnnouncedName !== peerName)`
-/// and gated BOTH the "Kendi seçtiği ad: …" line and the "Takma adı kaldır"
-/// button on it. Type the annotation as the peer's own name and both vanish:
-/// the peer can never change their name again from the UI.
+/// itself. Worse, an "is an alias set?" test was then written as
+/// `Boolean(peerAnnouncedName && peerAnnouncedName !== peerName)` and used to
+/// gate BOTH the "Kendi seçtiği ad: …" line and the "Takma adı kaldır" button.
+/// Type the annotation as the peer's own name and both vanish: the peer can
+/// never change their name again from the UI.
 ///
-/// And `src/App.tsx:438` wrote `display_name: peerAnnouncedName ||
-/// defaultPeerName` on re-pairing, so a known name was downgraded to the
-/// placeholder "Kişi" every time the channel came up before the peer's
-/// `profile` frame did.
+/// And re-pairing wrote `display_name: peerAnnouncedName || defaultPeerName`,
+/// so a known name was downgraded to the placeholder "Kişi" every time the
+/// channel came up before the peer's `profile` frame did.
 library;
 
 import 'dart:convert';
@@ -61,9 +60,8 @@ const KnownPeer peerTwo = KnownPeer(
 void main() {
   group('the announced name is the primary slot', () {
     test('an annotation does not change the displayed name', () {
-      // TS: `peerAlias || peerAnnouncedName || defaultPeerName` put the alias
-      // here, so the peer became "Patron" on this device and "Ayşe" everywhere
-      // else.
+      // The alias used to land in the primary slot, so the peer became "Patron"
+      // on this device and "Ayşe" everywhere else.
       final PeerNameView view = PeerNameView(
         announcedName: 'Ayşe',
         alias: 'Patron',
@@ -79,7 +77,7 @@ void main() {
     });
 
     test('no annotation and an unknown name falls back to the placeholder', () {
-      // TS: `defaultPeerName` at `src/App.tsx:31`.
+      // The placeholder that stands in for a name nobody has announced yet.
       final PeerNameView view = PeerNameView(announcedName: '');
       expect(view.displayName, KnownPeer.defaultAnnouncedName);
       expect(view.displayName, 'Kişi');
@@ -156,9 +154,8 @@ void main() {
     );
 
     test('the editor opens on the annotation, not on the display name', () {
-      // TS: `setNameDraft(aliasIsSet ? peerName : "")` at
-      // `src/ChatCallWorkspace.tsx:506`, which opened the editor on the DISPLAY
-      // name and so re-labelled the peer as themselves.
+      // The editor opened on the DISPLAY name, so clicking "Takma ad" on a peer
+      // who already had an annotation silently re-labelled them as themselves.
       expect(
         PeerNameView(announcedName: 'Ayşe', alias: 'Patron').aliasDraft,
         'Patron',
@@ -237,9 +234,8 @@ void main() {
     test(
       'there is NO unscoped fallback, which is the leak in the original',
       () {
-        // `readPeerAlias` at `src/App.tsx:77-85` returned the UNSCOPED
-        // `mkvi.peerName` for any peer with no scoped entry, and copied it onto
-        // whoever happened to be read first.
+        // The UNSCOPED `mkvi.peerName` used to be returned for any peer with no
+        // scoped entry, and copied onto whoever happened to be read first.
         final FakeSettings settings = FakeSettings();
         final PeerAliasStore aliases = PeerAliasStore(settings);
         expect(aliases.read(firstPeerKey), isEmpty);
@@ -303,9 +299,8 @@ void main() {
 
   group('this device own name', () {
     test('is sanitised on write AND on read', () {
-      // TS read `localStorage.getItem("mkvi.selfName")` raw at `src/App.tsx:35`
-      // and only truncated on write, so a value from an older build reached
-      // `sendProfile` unsanitised.
+      // The stored value used to be read raw and only truncated on write, so a
+      // value from an older build reached `sendProfile` unsanitised.
       final FakeSettings settings = FakeSettings();
       final SelfName self = SelfName(settings);
 
@@ -333,9 +328,8 @@ void main() {
 
   group('re-pairing must not downgrade a known name', () {
     test('no fresh profile keeps the previously stored name', () {
-      // TS: `display_name: peerAnnouncedName || defaultPeerName` at
-      // `src/App.tsx:438`, with `peerAnnouncedName` still empty because the
-      // channel came up before the profile frame.
+      // `peerAnnouncedName` is still empty here because the channel came up
+      // before the peer's profile frame.
       expect(resolveStoredAnnouncedName(fresh: null, stored: 'Ayşe'), 'Ayşe');
       expect(resolveStoredAnnouncedName(fresh: '', stored: 'Ayşe'), 'Ayşe');
       expect(resolveStoredAnnouncedName(fresh: '   ', stored: 'Ayşe'), 'Ayşe');
@@ -718,15 +712,13 @@ void main() {
 
   group('the avatar initials', () {
     test('use Turkish casing, as toLocaleUpperCase("tr-TR") did', () {
-      // TS: `peerName.slice(0, 2).toLocaleUpperCase("tr-TR")` at
-      // `src/ChatCallWorkspace.tsx:218`.
+      // Two code points of the primary name, upper-cased.
       expect(PeerNameView(announcedName: 'Ayşe').avatarInitials, 'AY');
       expect(PeerNameView(announcedName: 'iğne').avatarInitials, 'İĞ');
       expect(PeerNameView(announcedName: 'ıslak').avatarInitials, 'IS');
       expect(PeerNameView(announcedName: 'Kişi').avatarInitials, 'Kİ');
       // With no announced name the initials are the PLACEHOLDER's, because the
-      // placeholder is the primary slot. TS: `peerName.slice(0, 2)` over
-      // `peerAlias || peerAnnouncedName || defaultPeerName`.
+      // placeholder is the primary slot.
       expect(PeerNameView(announcedName: '').avatarInitials, 'Kİ');
       // And the annotation is not in the primary slot, so it is not the initials.
       expect(

@@ -1,14 +1,11 @@
 /// Every Turkish string the chat and file-transfer layer can produce, in one file.
 ///
-/// The TypeScript original mixed languages exactly here. `ChatCallWorkspace.tsx`
-/// had Turkish labels in its JSX but an **English** `state` union
-/// (`"active" | "done" | "failed"`) that it dropped straight into a class name
-/// (`className={`mkvi-transfer is-${transfer.state}`}`), `App.tsx` raised
-/// `setNotice("Message not stored locally.")`-shaped English falls-through
-/// branches, and `formatBytes` used `.` as the decimal separator while every
-/// neighbouring string was `tr-TR`. A Turkish/English split like that is not
-/// cosmetic: the layer is rendered, read aloud and screen-read by a Turkish
-/// user, so the split *is* the defect.
+/// The layer is rendered, read aloud and screen-read by a Turkish user, so a
+/// Turkish/English split is not cosmetic — **the split is the defect**. It is
+/// easy to reintroduce by accident: a state name is an English identifier, a
+/// class name is built from it, and a fall-through error branch is a sentence
+/// that never got translated. Everything below exists to make that impossible
+/// rather than merely discouraged.
 ///
 /// Two rules make it structural rather than a matter of discipline:
 ///
@@ -25,6 +22,9 @@
 /// Every number that is a protocol limit is read from `PeerProtocol` at call
 /// time, never written out. A literal "512 MB" here is a port that will still
 /// claim 512 MB after the cap is changed in one place.
+///
+/// This file never grows a `static const String` that is not in [all] — the test
+/// above reads the source text to prove it.
 library;
 
 import 'package:mkvi/core/protocol/file_transfer.dart';
@@ -39,41 +39,44 @@ final class ChatMessages {
   // Chat: the composer and the timeline
   // ---------------------------------------------------------------------
 
-  /// TS: the empty chat headline, `ChatCallWorkspace.tsx:571`.
+  /// The empty chat headline, shown before the first message exists.
   static const String emptyChatTitle = 'Güvenli sohbet hazır';
 
-  /// TS: the empty chat body, `ChatCallWorkspace.tsx:571`.
+  /// The empty chat body, explaining the one property the user actually cares
+  /// about before they type anything.
   static const String emptyChatBody =
       'Mesajlar yalnızca eşleşen cihazlar arasında gönderilir.';
 
-  /// TS: the `aria-label` of the message log, `ChatCallWorkspace.tsx:570`.
+  /// The `aria-label` of the message log.
   static const String messageLogLabel = 'Mesajlar';
 
-  /// TS: the read receipt appended to an outgoing message's meta line,
-  /// `ChatCallWorkspace.tsx:572`.
+  /// The read receipt appended to an outgoing message's meta line.
   static const String readReceipt = 'Okundu';
 
-  /// TS: the throw of `sendChat` for a blank body, `peer-transport.ts:230`.
+  /// Refused when the composed body is blank. Caught before anything is queued,
+  /// so an empty message never becomes a pending row.
   static const String emptyMessage = 'Boş mesaj gönderilemez.';
 
-  /// TS: the generic `sendMessage` catch, `App.tsx:501`.
+  /// The generic send failure, shown when the channel refused a message for a
+  /// reason that has no more specific line.
   static const String sendFailed = 'Mesaj gönderilemedi.';
 
-  /// TS: the throw of `sendMessage` with no transport, `App.tsx:497`.
+  /// Refused when there is no open channel to send on at all.
   static const String peerOffline = 'Karşı cihaz çevrimdışı.';
 
-  /// TS: both `appendLocalHistory` catches, `App.tsx:366` and `App.tsx:500`.
+  /// The local history write failed. Distinct from [sendFailed]: the message may
+  /// have reached the peer, and telling the user otherwise would be a lie.
   static const String messageNotStored = 'Mesaj yerelde saklanamadı.';
 
-  /// TS: the `listLocalHistory` catch, `App.tsx:203`.
+  /// The local history could not be read back.
   static const String historyUnavailable = 'Yerel geçmiş açılamadı.';
 
   /// Refusal of a send because the in-flight queue is at its bound.
   ///
-  /// Not in 0.1.x: there was no queue, so a message composed while the channel
-  /// was down was simply thrown away with a notice. This layer keeps the message
-  /// instead — and at the bound it must say so rather than dropping the oldest
-  /// one, because dropping the oldest is the same silent loss with extra steps.
+  /// There is a queue because a message composed while the channel was down must
+  /// not be thrown away. At the bound it must say so rather than dropping the
+  /// oldest one, because dropping the oldest is the same silent loss with extra
+  /// steps.
   static const String queueFull =
       'Bekleyen mesaj sayısı doldu. Bağlantı gelince gönderilecek.';
 
@@ -88,24 +91,29 @@ final class ChatMessages {
   // Chat: the channel seam
   // ---------------------------------------------------------------------
 
-  /// TS: the rejection `close` hands to every pending send, `peer-transport.ts:299`.
+  /// The channel closed while messages were in flight. Every pending send is
+  /// told, so a queued message cannot wait forever for a channel that is gone.
   static const String channelClosed = 'Bağlantı kapatıldı.';
 
-  /// TS: the throw of `ensureChannelOpen`, `peer-transport.ts:526`.
+  /// The direct connection is not established yet. Kept distinct from
+  /// [channelClosed]: one means "not yet", the other means "no longer".
   static const String channelNotReady = 'Doğrudan bağlantı henüz hazır değil.';
 
-  /// The refusal for a channel that is up but not taking frames, i.e.
-  /// back-pressure rather than a dead connection. No 0.1.x counterpart: the
-  /// browser transport threw "Dosya aktarımı zaman aşımına uğradı." after 30 s of
-  /// it, which is a timeout reported as if it were a network fault.
+  /// The channel is up but not taking frames, i.e. back-pressure rather than a
+  /// dead connection. This must not be reported as a timeout: a timeout is a
+  /// network fault, and telling the user their network failed when the peer is
+  /// merely busy is a diagnosis the user cannot act on.
   static const String channelBusy = 'Bağlantı şu anda meşgul.';
 
   // ---------------------------------------------------------------------
   // Chat: day separators and time
   // ---------------------------------------------------------------------
 
-  /// TS: no counterpart — 0.1.x had no day separator at all, so a two-week
-  /// conversation and a two-minute one rendered identically.
+  /// The day boundary label for today.
+  ///
+  /// A day separator exists because a two-week conversation and a two-minute one
+  /// otherwise render identically, and "when did she say that?" then has no
+  /// answer on screen.
   static const String today = 'Bugün';
 
   /// See [today].
@@ -115,28 +123,31 @@ final class ChatMessages {
   // Transfers: the transfer list
   // ---------------------------------------------------------------------
 
-  /// TS: the `aria-label` of the transfer list, `ChatCallWorkspace.tsx:577`.
+  /// The `aria-label` of the transfer list.
   static const String transferListLabel = 'Dosya aktarımları';
 
-  /// TS: the `%${percent}` branch of the transfer row, `ChatCallWorkspace.tsx:584`.
+  /// The transfer row's completed state.
   static const String completed = 'Tamamlandı';
 
-  /// TS: the second branch of the same line, `ChatCallWorkspace.tsx:584`.
+  /// The transfer row's failed state.
   static const String failed = 'Başarısız';
 
-  /// Not in 0.1.x: a cancelled transfer was rendered as `failed` with the
-  /// cancel reason in the detail line, which made "you stopped this" and "this
-  /// broke" indistinguishable in the only place the user could see it.
+  /// The transfer row's cancelled state.
+  ///
+  /// Its own state, not a flavour of [failed]: rendering a cancellation as a
+  /// failure makes "you stopped this" and "this broke" indistinguishable in the
+  /// only place the user can see it, and the two need different reactions.
   static const String cancelled = 'İptal edildi';
 
   /// The state of a transfer the peer announced and nobody has answered yet.
   static const String awaitingDecision = 'Karar bekleniyor';
 
-  /// The decline notice, `App.tsx:387`.
+  /// The notice when the peer declines an announced file.
   static const String offerDeclined = 'Dosya teklifi reddedildi.';
 
-  /// The cancel notice. No 0.1.x counterpart: `cancelFile` rejected the sender's
-  /// promise and the receiver only ever saw a vanished row.
+  /// The notice when the peer cancels a transfer in flight. The receiver has to
+  /// be told: a row that simply vanishes leaves the user wondering whether the
+  /// file is still coming.
   static const String remoteCancelled = 'Karşı taraf aktarımı iptal etti.';
 
   // ---------------------------------------------------------------------
@@ -180,7 +191,7 @@ final class ChatMessages {
   // The formatted strings
   // ---------------------------------------------------------------------
 
-  /// TS: the `sendChat` size guard, `peer-transport.ts:231`.
+  /// The size guard on a composed message.
   ///
   /// The "32 KB" is not written here: it is read out of
   /// [PeerProtocol.maxMessageBytes] through [formatBytes], so the message cannot
@@ -188,8 +199,7 @@ final class ChatMessages {
   static String messageTooLarge() =>
       'Mesaj en fazla ${formatBytes(PeerProtocol.maxMessageBytes)} olabilir.';
 
-  /// TS: the rejection of `sendFile` for an out-of-range size,
-  /// `peer-transport.ts:241`.
+  /// The refusal for an announced file whose size is out of range.
   ///
   /// Same discipline as [messageTooLarge]: the 512 MB comes from
   /// [PeerProtocol.maxFileBytes], never from a literal here.
@@ -204,18 +214,18 @@ final class ChatMessages {
   /// The reason sent on the wire when too many transfers are already tracked.
   static String tooManyTransfers() => PeerProtocol.tooManyPendingTransfers;
 
-  /// TS: the transfer row headline, `ChatCallWorkspace.tsx:583`.
+  /// The transfer row headline, naming the direction and the file.
   static String transferHeading(TransferDirection direction, String name) =>
       '${direction == TransferDirection.send ? 'Gönderiliyor' : 'Alınıyor'}: $name';
 
-  /// TS: the `aria-label` of the row's close button, `ChatCallWorkspace.tsx:585`.
+  /// The `aria-label` of the row's close button.
   static String dismissTransferLabel(String name) => '$name satırını kapat';
 
-  /// TS: the `aria-label` of the progress bar, `ChatCallWorkspace.tsx:587`.
+  /// The `aria-label` of the progress bar.
   static String transferProgressLabel(String name) =>
       '$name aktarım ilerlemesi';
 
-  /// TS: the completion notice, `App.tsx:376`.
+  /// The completion notice, including where the file landed.
   static String fileSaved(String name, String path) =>
       '$name kaydedildi: $path';
 
@@ -237,21 +247,20 @@ final class ChatMessages {
         : '${day.day} $month ${day.year}';
   }
 
-  /// The `HH:mm` meta line of one message. TS: `formatTime`,
-  /// `ChatCallWorkspace.tsx:102`, which was `Intl.DateTimeFormat("tr-TR", …)`.
+  /// The `HH:mm` meta line of one message.
   static String messageTime(DateTime value) =>
       '${_twoDigits(value.hour)}:${_twoDigits(value.minute)}';
 
-  /// The `transferred / total` detail line. TS: `formatBytes`,
-  /// `ChatCallWorkspace.tsx:107`.
+  /// The `transferred / total` detail line.
   ///
-  /// Two deliberate differences from the original, both because the result is
-  /// shown to a Turkish reader:
+  /// The decimal separator is `,` and not `.`, matching `tr-TR` and every other
+  /// string in this file. That is the whole defect this function exists to
+  /// prevent: the same number read two ways in the same row, where "1.5 MB" and
+  /// "1,5 MB" are two different files to a Turkish reader.
   ///
-  /// * the decimal separator is `,`, not `.`, matching `tr-TR`;
-  /// * the unit ladder is identical (`B`, `KB`, `MB`, `GB`) and the rounding is
-  ///   identical, so `32768` is still "32 KB" and [PeerProtocol.maxFileBytes] is
-  ///   still "512 MB".
+  /// The unit ladder (`B`, `KB`, `MB`, `GB`) and the rounding are deliberately
+  /// plain and identical at both ends, so `32768` is "32 KB" and
+  /// [PeerProtocol.maxFileBytes] is "512 MB".
   static String formatBytes(int value) {
     if (value < 1024) return '$value B';
     const List<String> units = <String>['KB', 'MB', 'GB'];

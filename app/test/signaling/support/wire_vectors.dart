@@ -1,9 +1,10 @@
 /// Reads the shared wire contract `vectors/wire-v1.json`.
 ///
-/// The file is parsed with `dart:convert` exactly as the TypeScript suite parses
-/// it with `JSON.parse`. There is no code generator and no Dart mirror of the
-/// vectors, because a mirror is exactly where the two implementations would
-/// start disagreeing again.
+/// The file is parsed with `dart:convert` and read as JSON, with no code
+/// generator and no Dart mirror of the vectors — a mirror is exactly where an
+/// implementation and its own contract would start disagreeing again. The same
+/// reasoning is why the JSON is parsed rather than generated: the file is the
+/// contract, and a generated copy is a second contract that can drift.
 library;
 
 import 'dart:convert';

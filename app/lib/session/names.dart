@@ -1,23 +1,18 @@
 /// Who the peer is, and what this device calls them.
 ///
-/// Two names existed in the TypeScript original and they were ranked the wrong
-/// way round. `src/App.tsx:119` was
+/// ## Why these are two slots and not one name with a precedence operator
 ///
-/// ```ts
-/// const peerName = peerAlias || peerAnnouncedName || defaultPeerName;
-/// ```
+/// A single `alias || announced || placeholder` expression is the obvious way to
+/// write this, and it ranks the two names backwards: a purely local annotation
+/// outranks the name the peer published about itself, so the announced name
+/// becomes invisible the moment a note is added.
 ///
-/// so a purely local annotation outranked the name the peer published about
-/// itself, and the announced name became invisible the moment a note was added.
-/// Worse, `src/components/ChatCallWorkspace.tsx:490` then computed
-///
-/// ```ts
-/// const aliasIsSet = Boolean(peerAnnouncedName && peerAnnouncedName !== peerName);
-/// ```
-///
-/// and gated BOTH the "Kendi seçtiği ad: …" line and the "Takma adı kaldır"
-/// button on it. Type the note as the peer's own name and both disappear: the
-/// peer can never change their name again from the UI.
+/// The worse half is what usually got built on top of that expression — an
+/// "is an alias set?" test written as "are the two names *different*?" — and
+/// then used to gate BOTH the "Kendi seçtiği ad: …" line and the
+/// "Takma adı kaldır" button. Type the note as the peer's own name and both
+/// disappear: the peer can never change their name again from the UI, and the
+/// user has no way to get the button back.
 ///
 /// [PeerNameView] is therefore not a pair of strings with a precedence
 /// operator. The announced name and the annotation are two separate slots, and
@@ -49,10 +44,9 @@ final class PeerNameView {
 
   /// Whether an annotation is set.
   ///
-  /// This asks about the annotation only. The `src/ChatCallWorkspace.tsx:490`
-  /// expression asked about the two names being DIFFERENT, which is why an
-  /// annotation equal to the announced name silently removed the "remove
-  /// annotation" button and the announced-name line.
+  /// This asks about the annotation only. Asking instead whether the two names
+  /// are *different* is what made an annotation equal to the announced name
+  /// silently remove the "remove annotation" button and the announced-name line.
   bool get hasAlias => alias.isNotEmpty;
 
   /// The primary display slot: the announced name, or the placeholder.
@@ -71,8 +65,8 @@ final class PeerNameView {
   /// Whether the "Kendi seçtiği ad: …" line must be visible.
   ///
   /// True whenever an annotation exists, including when the annotation happens
-  /// to equal the announced name. That case is the one the TypeScript original
-  /// could not render, and it is the case where the peer is MOST likely to
+  /// to equal the announced name. That case is the one a "are they different?"
+  /// test cannot render, and it is the case where the peer is MOST likely to
   /// want to change their name.
   bool get showsAnnouncedName => hasAlias && !announcedNameIsUnknown;
 
@@ -81,15 +75,14 @@ final class PeerNameView {
   /// called this locally?".
   bool get canRemoveAlias => hasAlias;
 
-  /// What the annotation editor should open pre-filled with. TS:
-  /// `setNameDraft(aliasIsSet ? peerName : "")` at
-  /// `src/ChatCallWorkspace.tsx:506`, which opened it with the DISPLAY name, so
-  /// clicking "Takma ad" on a peer with an annotation silently re-labelled the
-  /// peer as themselves. It is the annotation, or empty when there is none.
+  /// What the annotation editor should open pre-filled with.
+  ///
+  /// The *annotation*, or empty when there is none. Pre-filling it with the
+  /// display name instead would make clicking "Takma ad" on a peer who already
+  /// has an annotation silently re-label them as themselves.
   String get aliasDraft => alias;
 
-  /// TS: `peerName.slice(0, 2).toLocaleUpperCase("tr-TR")` at
-  /// `src/ChatCallWorkspace.tsx:218`, over the primary name.
+  /// The avatar initials, from the primary name.
   ///
   /// `String.toUpperCase` takes no locale on this SDK, so the Turkish casing is
   /// applied by [turkishUpperCase] before the default pass. The locale is not
@@ -103,21 +96,19 @@ final class PeerNameView {
     );
   }
 
-  /// TS: the `Kendi seçtiği ad: {peerAnnouncedName}` line at
-  /// `src/ChatCallWorkspace.tsx:513`.
+  /// The "Kendi seçtiği ad: …" line.
   String get announcedNameLabel => 'Kendi seçtiği ad: $announcedName';
 
-  /// TS: the `Takma ad` button at `src/ChatCallWorkspace.tsx:506`.
+  /// The "Takma ad" button.
   String get aliasButtonLabel => 'Takma ad';
 
-  /// TS: `aria-label` of the alias reset button, `src/ChatCallWorkspace.tsx:514`.
+  /// `aria-label` of the alias reset button.
   String get removeAliasLabel => 'Takma adı kaldır';
 
-  /// TS: the `aria-label` of the inline alias editor,
-  /// `src/ChatCallWorkspace.tsx:507`.
+  /// `aria-label` of the inline alias editor.
   String get aliasFieldLabel => 'Bu cihazdaki kişi takma adı';
 
-  /// TS: the editor's `placeholder`, which falls back to the announced name so
+  /// The editor's `placeholder`, which falls back to the announced name so
   /// the user can see what the peer actually calls themselves.
   String get aliasFieldPlaceholder =>
       announcedName.isEmpty ? displayName : announcedName;
@@ -148,11 +139,11 @@ String sanitizeAlias(String raw) => safeDisplayName(raw);
 
 /// Upper-cases with Turkish casing rules, then with the default Unicode table.
 ///
-/// TS: `toLocaleUpperCase("tr-TR")`. `String.toUpperCase` on this SDK accepts no
-/// locale, so the two Turkish-specific mappings are done by hand first:
-/// `i` becomes `İ` (U+0130) and `ı` becomes `I`. After that no `i` or `ı`
-/// survives into the default pass, so the two cannot disagree, and both are
-/// single code points in and out, so the length is unchanged.
+/// `String.toUpperCase` on this SDK accepts no locale, so the two
+/// Turkish-specific mappings are done by hand first: `i` becomes `İ` (U+0130) and
+/// `ı` becomes `I`. After that no `i` or `ı` survives into the default pass, so
+/// the two cannot disagree, and both are single code points in and out, so the
+/// length is unchanged.
 String turkishUpperCase(String value) {
   final StringBuffer out = StringBuffer();
   for (final int rune in value.runes) {
@@ -169,13 +160,12 @@ String turkishUpperCase(String value) {
 
 /// The peer's local annotation, keyed by the peer's public key.
 ///
-/// TS: `peerAliasKey`, `readPeerAlias` and `renamePeer` at `src/App.tsx:75-85`
-/// and `524-532`.
+/// ## Why there is no fallback key
 ///
-/// The TypeScript [readPeerAlias] fell back to the UNSCOPED `mkvi.peerName` key
-/// for any peer that had no scoped entry, and migrated it on read. So a note
-/// left for one person was shown for the NEXT person paired to this install,
-/// and the scoped key it was copied into belonged to whoever happened to be
+/// An earlier build read an annotation from the UNSCOPED `mkvi.peerName` key for
+/// any peer that had no scoped entry, and migrated it on read. A note left for
+/// one person was therefore shown for the NEXT person paired to this install,
+/// and the scoped key it got copied into belonged to whoever happened to be
 /// restored first. This port has no such fallback: [read] is a pure function of
 /// one key, and the one-time migration is [migrateLegacyAlias], which the
 /// bootstrap calls for the peer it actually restored and nowhere else.
@@ -202,7 +192,7 @@ final class PeerAliasStore {
 
   void remove(String publicKey) => _settings.remove(peerAliasKey(publicKey));
 
-  /// Moves the unscoped 0.1.x annotation onto [publicKey] and returns it.
+  /// Moves the unscoped legacy annotation onto [publicKey] and returns it.
   ///
   /// Returns '' and writes nothing when there is no legacy value, or when this
   /// public key already has an entry. The caller decides which peer it is; this
@@ -223,21 +213,21 @@ final class PeerAliasStore {
 
 /// This device's own announced name, sanitised on read AND on write.
 ///
-/// TS read `localStorage.getItem("mkvi.selfName")` raw at module load
-/// (`src/App.tsx:35`) and only truncated on write (`src/App.tsx:595` and `608`),
-/// so a value written by an older build, or by a hand-edited store, reached
-/// `sendProfile` unsanitised. Both ends go through [safeDisplayName] here: an
-/// empty result is stored as an empty string, and a read of an empty string is
-/// the "no name" state the UI already handles.
+/// Sanitising only on write is not enough: a value written by an older build, or
+/// by a hand-edited store, would reach the profile frame unsanitised and be
+/// rejected by the peer's parser — a message the user never typed and cannot
+/// see. Both ends therefore go through [safeDisplayName]: an empty result is
+/// stored as an empty string, and a read of an empty string is the "no name"
+/// state the UI already handles.
 final class SelfName {
   const SelfName(this._settings);
 
   final LocalSettings _settings;
 
-  /// TS: `savedSelfName`, sanitised.
+  /// The stored name, sanitised.
   String read() => sanitizeSelfName(_settings.read(SettingsKeys.selfName));
 
-  /// TS: the `onChange` and `onRenameSelf` handlers, sanitised.
+  /// Sanitises before storing, so nothing invalid is ever written.
   void write(String raw) =>
       _settings.write(SettingsKeys.selfName, sanitizeSelfName(raw));
 }

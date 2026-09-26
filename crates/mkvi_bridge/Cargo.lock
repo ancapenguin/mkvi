@@ -1080,7 +1080,7 @@ dependencies = [
 
 [[package]]
 name = "mkvi_bridge"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "base64",
  "flutter_rust_bridge",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "mkvi_core"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "base64",
  "chacha20poly1305",

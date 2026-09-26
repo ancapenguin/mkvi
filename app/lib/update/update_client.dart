@@ -442,6 +442,12 @@ final class UpdateClient {
           return _refused(at, const UpdateFailureLegacyKey());
         case ArtifactSignatureUnreadable():
           return _refused(at, const UpdateFailureSignatureUnreadable());
+        case ArtifactSizeMismatch():
+          // The file on disk is not the length this client counted, so it was
+          // never hashed. A truncated write is not an attacker, and saying so is
+          // the difference between a sentence a user can act on and one they
+          // cannot.
+          return _refused(at, const UpdateFailureArtifactSizeMismatch());
         case ArtifactSignatureRejected():
           return _refused(at, const UpdateFailureSignatureRejected());
         case ArtifactSignatureValid():

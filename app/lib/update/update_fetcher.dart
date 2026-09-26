@@ -243,11 +243,12 @@ final class HttpUpdateFetcher implements HttpFetcher {
       return;
     }
     if (response.statusCode != 200) {
-      // A 404 is the failure this product shipped with: the endpoint in
-      // `src-tauri/tauri.conf.json:43` points at a repository that does not
-      // exist. It is a transport failure here, not a malformed manifest, so the
-      // user is told the server could not be reached rather than that the
-      // document made no sense.
+      // A 404 is the everyday failure of a release that has no artefact
+      // attached to it - and the permanent failure of 0.1.x, whose feed lived
+      // in a private repository and answered 404 to everyone. Either way it is a
+      // transport failure here, not a malformed manifest, so the user is told
+      // the server could not be reached rather than that the document made no
+      // sense.
       yield DownloadFailed('http ${response.statusCode}');
       return;
     }

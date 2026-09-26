@@ -1,18 +1,16 @@
 /// The colours and the measurements of the notice layer, as two injectable
 /// values — and **not one colour literal in this file**.
 ///
-/// The design system is generated into `design/generated/tokens.g.dart` and is
-/// reached as `package:mkvi_design/generated/tokens.g.dart`. The `app` package
-/// has no dependency on it yet (see the orphan comment in `app/pubspec.yaml`
-/// above `cupertino_icons`, which describes exactly that dependency), so this
-/// layer cannot name `MkviTokens` — and a layer that cannot name the tokens
-/// must not invent colours, because an invented colour is a colour that will
-/// never follow a theme.
+/// The design system is generated into `design/lib/generated/tokens.g.dart` and is
+/// reached as `package:mkvi_design/mkvi_design.dart`. `app` depends on it as a
+/// path dependency (added 2026-09-26), so this layer *can* now name
+/// `MkviTokens` — but it still does not, and that is deliberate.
 ///
-/// So the rule is structural instead: **[NoticePalette] has no defaults.** The
+/// A layer that imports the generated file binds itself to a generator's output
+/// shape. The rule stays structural: **[NoticePalette] has no defaults.** The
 /// only way to get one is to build it from a resolved token set, and every
 /// field names the `MkviRole` it must come from. The bridge is one function in
-/// the app root, once the dependency exists:
+/// the app root:
 ///
 /// ```dart
 /// NoticePalette paletteFor(MkviTokens t) => NoticePalette(

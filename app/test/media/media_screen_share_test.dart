@@ -14,8 +14,8 @@ import 'support/media_fakes.dart';
 
 void main() {
   group('the screen sender', () {
-    // peer-transport.ts:76-80: "the screen sender must not replace the camera
-    // sender, because both video sources may be live at once."
+    // "The screen sender must not replace the camera sender, because both video
+    // sources may be live at once."
     test('a share attaches to the screen sender, not the camera one', () async {
       final MediaHarness harness = MediaHarness();
       addTearDown(harness.dispose);

@@ -1,15 +1,11 @@
-/// Port of `src/domain/signaling.test.ts` (3 tests), plus the Dart-only extras
-/// the TypeScript suite has no way to express.
+/// The pairing code's alphabet and length rules: 3 core cases, plus the extras
+/// that a seeded `Random` makes expressible.
 ///
-/// 1:1 mapping, same order:
-///
-/// | TypeScript                                  | Dart                                       |
-/// |---------------------------------------------|--------------------------------------------|
-/// | creates 65-bit, unambiguous codes           | creates 65-bit, unambiguous codes          |
-/// | normalizes pasted codes ... ambiguous chars | normalizes pasted codes without accepting  |
-/// |                                             |   ambiguous characters                    |
-/// | keeps legacy identities compatible ...      | keeps a legacy identity compatible while  |
-/// |                                             |   allowing a reconnect session            |
+/// | case                                              | what it pins            |
+/// |---------------------------------------------------|-------------------------|
+/// | creates 65-bit, unambiguous codes                 | entropy and alphabet    |
+/// | normalizes pasted codes without accepting them    | the normaliser          |
+/// | keeps a legacy identity compatible while allowing a reconnect session | the v1/v2 split |
 library;
 
 import 'dart:math';
@@ -58,8 +54,9 @@ void main() {
 
   group('Dart-only extras', () {
     test('produces the same code for the same random source', () {
-      // The TypeScript version cannot be pinned this way: it reads
-      // `crypto.getRandomValues`, so its output is only shape-checked.
+      // A seeded source makes determinism checkable, which an injected
+      // `crypto.getRandomValues` never could — its output could only be
+      // shape-checked.
       expect(createPairingCode(random: Random(7)), createPairingCode(random: Random(7)));
       expect(createTransferId(random: Random(7)), createTransferId(random: Random(7)));
     });
@@ -77,9 +74,9 @@ void main() {
     });
 
     test('drops the Turkish dotted and dotless I from a pasted code', () {
-      // Both upper-case to I, which the alphabet omits. Matching the TypeScript
-      // here matters: a locale-sensitive upper-case would keep them and the
-      // server would answer 400.
+      // Both upper-case to I, which the alphabet omits. This matters because a
+      // locale-sensitive upper-case would keep them and the server would
+      // answer 400.
       expect(normalizePairingCode('ıİiI'), isEmpty);
       expect(normalizePairingCode('K7M4P2X9Q6TRı'), 'K7M4P2X9Q6TR');
     });
@@ -88,8 +85,8 @@ void main() {
       // JavaScript's `toUpperCase` applies the full Unicode SpecialCasing table
       // and Dart's applies only the simple one, so a code containing `ß` or a
       // Latin ligature would silently contribute ASCII letters in one language
-      // and nothing in the other. This pins the port to the JavaScript answer,
-      // which is what the frozen 0.1.x build and the Worker both do.
+      // and nothing in the other. This pins the normaliser to the answer the
+      // Worker gives, which is the one that has to match.
       expect(normalizePairingCode('ß'), 'S'); // upper-cases to "Ss"
       expect(normalizePairingCode('ﬁ'), 'F'); // U+FB01 expands to "FI"
       expect(normalizePairingCode('ŉ'), 'N'); // U+0149 expands to "'N"
