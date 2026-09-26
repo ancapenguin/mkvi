@@ -51,9 +51,6 @@ src/, src-tauri/        0.1.x donmuş hat; Flutter 0.2.0 yayınlandıktan sonra 
   çözülüyor — elle COM yazmaya gerek kalmıyor.
 - `flutter_webrtc` 1.6.2+hotfix.3: 306k indirme, 4.5k yıldız, doğrulanmış yayıncı,
   son 12 ayda Windows'a özel düzeltmeler. Platformlar arası tek WebRTC yığını.
-- **Bu karar yeni değil.** Aynı fikrin önceki denemesi olan `oxide`'de (Rust/axum sunucu)
-  istemci zaten Flutter olarak planlanmıştı. Yani Flutter'a geçiş, bu makinede en az iki
-  kez denenmiş bir karar. Bkz. `beyin/knowledge/mkvi-kapsam-karari.md`.
 
 **Flutter aleyhine (kabul edilen riskler):**
 
