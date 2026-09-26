@@ -1,0 +1,36 @@
+# flutter_rust_bridge codegen for the Flutter shell.
+#
+# Run from this directory:
+#   flutter_rust_bridge_codegen generate
+#
+# The app consumes `dart/` as a path dependency. It must not regenerate the
+# bindings: they are checked in so a clean clone builds without the generator.
+
+# The module frb parses. Everything reachable from it is what Dart can call, which
+# is why the surface is kept in one small file.
+rust_input: crate::api
+
+# The directory holding this crate's Cargo.toml, relative to this file. It is a
+# path, not a crate path: with this set to `.`, the generated Rust lands in
+# `src/frb_generated.rs` and `lib.rs` gains `pub mod frb_generated;`.
+rust_root: .
+
+# The generated Dart lands in `dart/lib/src/rust` rather than in the app, so the
+# bindings travel with the crate that produces them and a reviewer can read the
+# wire contract without leaving `crates/mkvi_bridge/`. It has to sit under a
+# `lib/`: the generated code declares `part '…freezed.dart'`, and build_runner
+# only generates parts for files inside `lib/`. The app then adds
+# `crates/mkvi_bridge/dart` as a path dependency and must not regenerate it.
+dart_output: dart/lib/src/rust
+
+# The Dart package root, i.e. where this crate's `dart/pubspec.yaml` lives.
+dart_root: dart
+
+# Load-bearing, not a style choice. Dart-async is the default, and it is what we
+# want: a sync Rust body is executed on flutter_rust_bridge's thread pool, so a
+# blocking SQLite write cannot jank the Flutter UI isolate. Set this to false (or
+# tag a function `#[frb(sync)]`) and the same call lands on the UI thread.
+default_dart_async: true
+
+# The Rust side keeps the errors as enums, so nothing here needs `anyhow`.
+full_dep: false

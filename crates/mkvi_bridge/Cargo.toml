@@ -1,0 +1,41 @@
+[package]
+name = "mkvi_bridge"
+version = "0.1.4"
+description = "MKVI Flutter köprüsü: mkvi_core'i flutter_rust_bridge ile Dart'a açar"
+authors = ["MKVI"]
+edition = "2021"
+
+# Deliberately its own package, not a workspace member, for the same reason
+# mkvi_core is: the Flutter shell builds this through cargokit from its own
+# directory, and the desktop shell must never pull the bridge in.
+#
+# `staticlib` + `cdylib` is what flutter_rust_bridge requires: `cdylib` for the
+# Dart FFI `DynamicLibrary` on Windows/macOS/Linux/Android, `staticlib` for iOS.
+[lib]
+name = "mkvi_bridge"
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+mkvi_core = { path = "../mkvi_core" }
+
+# Pinned to the exact codegen version. flutter_rust_bridge checks the codegen
+# version against this at startup and refuses to run on a mismatch, so a caret
+# range would turn a dependency bump into a runtime panic instead of a compile
+# error. Bump both together: `cargo install flutter_rust_bridge_codegen
+# --version <x> --locked` and this line.
+flutter_rust_bridge = "=2.13.0"
+
+# The signing wire format. `public_key_base64` and the signatures the Tauri
+# shell already exchanged are unpadded standard base64, and the peer protocol
+# cannot be changed by the Flutter port, so the same engine is used here.
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+# `#[frb(..)]` expands to `#[cfg(frb_expand)]`, which rustc's check-cfg does not
+# know about. Declaring it keeps `cargo build` warning-free instead of leaving a
+# red line in every build log that people learn to scroll past.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+

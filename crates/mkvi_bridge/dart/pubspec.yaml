@@ -1,0 +1,25 @@
+name: mkvi_bridge
+description: "MKVI Flutter köprüsünün Dart tarafı: üretilmiş FFI bağlantıları ve bağımsız gidiş-dönüş kanıtı."
+publish_to: "none"
+version: 0.1.4
+
+# The package name is not cosmetic: flutter_rust_bridge resolves the native
+# library as `package:<this name>/mkvi_bridge`, and the stem has to match the
+# Rust `lib.name` in Cargo.toml or cargokit will not find the built library.
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # Pinned to the codegen version, exactly like the Rust side. The Dart package
+  # and the Rust crate must agree or the generated glue refuses to start.
+  flutter_rust_bridge: 2.13.0
+
+  # The generated code declares `@freezed` unions, so the annotation package has
+  # to be a runtime dependency of this package.
+  freezed_annotation: ^3.1.0
+
+dev_dependencies:
+  # Codegen itself runs build_runner over the generated annotations. Both are
+  # toolchain-only and never reach the app.
+  build_runner: ^2.4.0
+  freezed: ^3.0.0
