@@ -39,6 +39,22 @@ Tauri bilmez. `cloudflare/` hiçbir şeyi bilmez.
 
 ## Öğrenilenler — 0.1.4 gerçek cihazlarda denendi
 
+> **Ayrıca iki sözleşme ihlali bulundu:** ortak vektör dosyası
+> (`vectors/wire-v1.json`, 134 vaka) hem TypeScript hem Dart uygulamasını aynı
+> kurallara bağladı ve 0.1.x'in **iki** gerçek kusurunu ortaya çıkardı. Bunlar
+> `src/services/signaling-vectors.test.ts` içinde `it.fails` ile sabitlendi —
+> kural ihlali gerçekken suite yeşil kalıyor, kaynak düzelince test kırmızıya
+> dönmeye başlıyor. **8 vakit** iki kök nedenden geliyor:
+>
+> | # | Kök neden | Vaka sayısı | Durum |
+> |---|---|---|---|
+> | 11 | **`wss://` sessizce `ws://`'ye düşürülüyor.** `rendezvous.ts:13` yalnız `https:` → `wss:` eşlemesi yapıyor. Ayarlara `wss://` adresi yazan kullanıcı **şifresiz** sinyal bağlantısı alıyor; kimlik imzaları ve SDP açıkta. | 1 | Dart portu doğru; `test/signaling` yeşil |
+> | 12 | **Geçersiz endpoint `connect()`'i senkron olarak `TypeError` ile kaçırıyor.** `new URL(path, endpoint)` (`rendezvous.ts:12`) promise'in dışında, yani `connect(...).catch(...)` hiç çalışmıyor; kullanıcı "Signaling sunucusuna bağlanılamadı." yerine ham bir `TypeError: Invalid URL` görüyor. | 7 | Dart portu doğru; `test/signaling` yeşil |
+>
+> Bu iki kusur donmuş 0.1.x hattında **düzeltilmiyor** — hat artık yayımlanmıyor ve
+> kuzen Flutter build'ini elle kuracak. Vektörler ve `it.fails` işaretleri
+> TypeScript satırı silinene kadar kanıt olarak kalıyor.
+
 Bu on kusur **canlı testte** bulundu. Kaynak: kullanıcının canlı test raporu + her biri
 için dosya/satır düzeyinde kök neden analizi.
 

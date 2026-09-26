@@ -1,0 +1,1279 @@
+{
+  "schema": "mkvi.wire",
+  "version": 1,
+  "aciklama": "MKVI sinyalleşme katmanının TEL SÖZLEŞMESİ. Bu dosya tek kaynaktır: hem TypeScript istemcisi (src/services/signaling-vectors.test.ts) hem Dart istemcisi (app/test/signaling/wire_vectors_test.dart) aynı dosyayı okuyup aynı iddiaları çalıştırır. Kural: burada olan her biçim kararı, iki uygulamada da birebir aynı olmak zorundadır. Kod üreteci yoktur; iki taraf da dosyayı JSON olarak okur. Bir kutu eklemek/çıkarmak iki testi de aynı anda değiştirir.",
+  "kaynaklar": [
+    "src/domain/signaling.ts",
+    "src/services/rendezvous.ts",
+    "src/services/peer-transport.ts (parseControl, randomTransferId)",
+    "cloudflare/src/index.ts (fetch, isRelayEnvelope, isSignalPayload)",
+    "src/App.tsx (createRendezvousId)"
+  ],
+  "okumaKurallari": [
+    "Tüm dize örnekleri ASCII'dir; iki uygulamanın JSON kaçış davranışı bu dosyada ölçülmez.",
+    "Sorgu dizesi kodlaması WHATWG URLSearchParams (application/x-www-form-urlencoded) ile birebir aynı olmalıdır: A-Za-z0-9*-._ korunur, boşluk '+' olur, gerisi büyük harf %XX olarak UTF-8 kodlanır.",
+    "'expect' her zaman aynı üç anahtarı taşır ve null, olayın TETİKLENMEDİĞİ anlamına gelir."
+  ],
+  "patterns": {
+    "aciklama": "Her istemci, Worker veya ayrıştırıcı bu düzenli ifadeleri uygular. Değiştirmek kırıcıdır: Worker tarafında bir alanı sıkmak, o alanı hâlâ gönderen istemcileri close(1008) ile düşürür.",
+    "pairingCode": "^[A-HJ-NP-Z2-9]{13,16}$",
+    "pairingCodeAlphabet": "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+    "pairingCodeLength": 13,
+    "normalizePairingCodeMaxLength": 16,
+    "opaqueId": "^[A-Za-z0-9_-]{43}$",
+    "publicKey": "^[A-Za-z0-9+/_-]{43}$",
+    "signature": "^[A-Za-z0-9+/_-]{86}$",
+    "transferId": "^[a-f0-9]{32}$"
+  },
+  "errors": {
+    "aciklama": "Kullanıcıya gösterilen hata metinleri. İki uygulama da aynı metni üretmek zorundadır; ham bir TypeError/FormatException yüzeye çıkmamalıdır.",
+    "connect": "Signaling sunucusuna bağlanılamadı.",
+    "notOpen": "Signaling bağlantısı açık değil."
+  },
+  "forbiddenKeys": {
+    "aciklama": "Sinyal zarfına ASLA eklenemeyecek anahtarlar. isSignalPayload anahtar bazında beyaz listedir; bir anahtar eklemek Worker'ı içerik tüneline çevirir. Her satır, geçerli bir zarfın üstüne o anahtarı koyarak reddedildiğini kanıtlar.",
+    "keys": [
+      { "key": "text", "aciklama": "Sohbet içeriği. İçerik sunucuda tutulmaz; sinyalleşme yalnızca el sıkışma taşır." },
+      { "key": "bytes", "aciklama": "Ham dosya baytları. Boyut sınırı olmadan taşınabildiği için Worker'ı depoya çevirir." },
+      { "key": "data", "aciklama": "Genel amaçlı alan. Her şeyi sarmalayabildiği için beyaz listeyi işlevsiz bırakır." },
+      { "key": "file", "aciklama": "Dosya içeriği veya yolu. İçerik tüneli." },
+      { "key": "message", "aciklama": "İçerik tüneli; sohbet ve kontrol mesajları ayrı bir kanaldadır." },
+      { "key": "ciphertext", "aciklama": "Şifreli görünse de sunucunun taşıdığı bayt sınırını aşan bir içerik tünelidir; beyaz listenin amacı taşınan şeyin şeklini bilmektir." },
+      { "key": "url", "aciklama": "Keyfi adres. İstemciyi istediği yere çekmek için kullanılabilir." },
+      { "key": "channel", "aciklama": "Odayı pub/sub kuyruğuna çevirir; iki cihazlı sınırı anlamsızlaştırır." },
+      { "key": "topic", "aciklama": "Kanal seçici; odanın iki kişilik sözleşmesini deler." },
+      { "key": "name", "aciklama": "Görünen ad. Takma ad yerelde kalır, tel üzerine çıkmaz." },
+      { "key": "nickname", "aciklama": "Görünen adın başka adı; aynı gerekçeyle yasak." },
+      { "key": "rendezvous", "aciklama": "0.1.5'te ölü alan olarak kaldırıldı. Geri eklemek kimliği doğrulamayan bir yönlendirme ipucu olur." },
+      { "key": "code", "aciklama": "Oda yönlendirmesi Worker'da; istemci kendi kodunu taşırsa ikinci bir yönlendirme katmanı açılır." },
+      { "key": "ttl", "aciklama": "Yaşam süresi alanı. Alarmı zaten Worker yönetiyor; istemciden gelen değer onu atlatabilir." }
+    ]
+  },
+  "groups": [
+    {
+      "id": "pairingCodeShape",
+      "aciklama": "Üretilen kodun alfabesi ve uzunluğu. I, O, 0 ve 1 ile küçük harfler kasıtlı olarak yoktur: kullanıcı bunları ekranda '1' ile 'l', '0' ile 'O' olarak okuyup yanlış yazar. 13 karakter x 32 seçenek = 65 bit.",
+      "cases": [
+        {
+          "id": "createPairingCode-shape",
+          "kind": "pairingCodeShape",
+          "aciklama": "128 üretimin hepsi 13 karakter, yalnız ABCDEFGHJKLMNPQRSTUVWXYZ23456789 alfabesinden ve birbirinden farklı olmalı.",
+          "expect": { "alphabet": "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", "length": 13, "uniqueSamples": 128 }
+        }
+      ]
+    },
+    {
+      "id": "normalizePairingCode",
+      "aciklama": "Kullanıcının yazdığı kodu temizleme. TypeScript'te src/domain/signaling.ts, Worker'da cloudflare/src/index.ts içindeki /^[A-HJ-NP-Z2-9]{13,16}$/ ve toUpperCase() zincirinin ilk halkası budur. Üç katman aynı sonucu vermeli.",
+      "cases": [
+        {
+          "id": "normalize-valid-passthrough",
+          "kind": "normalizePairingCode",
+          "aciklama": "Temiz bir kod değişmeden geçer.",
+          "input": "K7M4P2X9Q6TRH",
+          "expect": "K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "normalize-lowercase-folded",
+          "kind": "normalizePairingCode",
+          "aciklama": "Küçük harf büyütülür, yok sayılmaz. Klavye büyük harfe geçse de kullanıcı küçük harf yazar.",
+          "input": "k7m4p2x9q6trh",
+          "expect": "K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "normalize-excluded-characters-dropped",
+          "kind": "normalizePairingCode",
+          "aciklama": "I, O, 0 ve 1 her zaman düşer. 0/O ve 1/I ayrımı burada yapılır, çünkü alfabe onları hiç içermez.",
+          "input": "IO01",
+          "expect": ""
+        },
+        {
+          "id": "normalize-lowercase-ambiguous-rejected",
+          "kind": "normalizePairingCode",
+          "aciklama": "Küçük i ve o da düşer: önce büyütülürler, sonra yasak harf hâline gelirler. 'küçük harf kabul edilir' kuralı I/O içermeyen harfler içindir.",
+          "input": "iO01k7m4p2",
+          "expect": "K7M4P2"
+        },
+        {
+          "id": "normalize-separators-dropped",
+          "kind": "normalizePairingCode",
+          "aciklama": "Tire, boşluk ve noktalama atılır; yapıştırılan kodda kullanıcı istediğini yazar.",
+          "input": "ab-2 c9 i0o!Z",
+          "expect": "AB2C9Z"
+        },
+        {
+          "id": "normalize-truncated-to-16",
+          "kind": "normalizePairingCode",
+          "aciklama": "21 karakterlik yapıştırma 16'ya kırpılır. Worker üst sınırı da 16 kabul eder; daha uzun kod sessizce 400 döner.",
+          "input": "K7M4P2X9Q6TRHABCDEFGH",
+          "expect": "K7M4P2X9Q6TRHABC"
+        },
+        {
+          "id": "normalize-empty-stays-empty",
+          "kind": "normalizePairingCode",
+          "aciklama": "Tamamen yasak karakterlerden oluşan girdi boş kalır; istemci boş kodu göndermemeli.",
+          "input": "0O1I!@#",
+          "expect": ""
+        },
+        {
+          "id": "normalize-unicode-dropped",
+          "kind": "normalizePairingCode",
+          "aciklama": "Türkçe harf içeren yapıştırma temizlenir; alfabe ASCII dışına çıkmaz.",
+          "input": "ÇĞİÖŞÜabc",
+          "expect": "ABC"
+        }
+      ]
+    },
+    {
+      "id": "pairingCodeAccepted",
+      "aciklama": "Worker'ın /v1/rendezvous kabul testi: searchParams.get('code').toUpperCase() sonra ^[A-HJ-NP-Z2-9]{13,16}$. Bu yüzden küçük harfli temiz kod KABUL edilir, ama küçük i/o içeren kod reddedilir.",
+      "cases": [
+        {
+          "id": "accept-13",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Üretilen kod biçimi birebir kabul edilir.",
+          "value": "K7M4P2X9Q6TRH",
+          "expect": true
+        },
+        {
+          "id": "accept-16",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "16 karakterlik kod da kabul edilir; üst sınır 16.",
+          "value": "K7M4P2X9Q6TRH234",
+          "expect": true
+        },
+        {
+          "id": "accept-lowercase",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Küçük harfli temiz kod, Worker toUpperCase() çağırdığı için kabul edilir.",
+          "value": "k7m4p2x9q6trh",
+          "expect": true
+        },
+        {
+          "id": "reject-12-too-short",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "12 karakter çok kısa: oda oluşturulmaz, 400 döner.",
+          "value": "K7M4P2X9Q6TR",
+          "expect": false
+        },
+        {
+          "id": "reject-17-too-long",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "17 karakter çok uzun: 400. 16'ya kırpma istemcide normalize ile yapılır, sunucuda sessizce düzeltilmez.",
+          "value": "K7M4P2X9Q6TRH2345",
+          "expect": false
+        },
+        {
+          "id": "reject-zero",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Rakam 0 alfabede yok; kullanıcı O yazmış olabilir, reddedilir.",
+          "value": "K7M4P2X9Q6TR0",
+          "expect": false
+        },
+        {
+          "id": "reject-letter-i",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Büyük I alfabede yok (1 ile karışır).",
+          "value": "K7M4P2X9Q6TRI",
+          "expect": false
+        },
+        {
+          "id": "reject-letter-o",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Büyük O alfabede yok (0 ile karışır).",
+          "value": "K7M4P2X9Q6TRO",
+          "expect": false
+        },
+        {
+          "id": "reject-lowercase-i",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Küçük i büyütülür ve yasak I olur: sessiz bir yazım hatası 400'e dönüşür, yanlış odaya girmez.",
+          "value": "k7m4p2x9q6tri",
+          "expect": false
+        },
+        {
+          "id": "reject-lowercase-o",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Küçük o büyütülür ve yasak O olur.",
+          "value": "k7m4p2x9q6tro",
+          "expect": false
+        },
+        {
+          "id": "reject-dash",
+          "kind": "pairingCodeAccepted",
+          "aciklama": "Sunucu tireyi temizlemez; yalnızca büyütür. '-', 13 karakterlik kurallı kodu geçersiz kılar.",
+          "value": "K7M4P2X9Q6-RH",
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "opaqueIdShape",
+      "aciklama": "pair, device ve session kimlikleri: 32 rastgele baytın base64url (padding'siz) hâli = 43 karakter [A-Za-z0-9_-]. Bunlar tahmin edilemez taşıyıcı yetkilerdir, kullanıcı tanımlayıcı değil.",
+      "cases": [
+        {
+          "id": "opaqueId-shape",
+          "kind": "opaqueIdShape",
+          "aciklama": "128 üretimin hepsi 43 karakter, yalnız base64url alfabesi ve birbirinden farklı olmalı.",
+          "expect": { "length": 43, "alphabet": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", "uniqueSamples": 128 }
+        }
+      ]
+    },
+    {
+      "id": "transferId",
+      "aciklama": "DataChannel kontrol mesajı kimliği: 16 baytın küçük harf hex'i = 32 karakter [a-f0-9]. 0.1.x'te crypto.randomUUID() buraya konduğu için 36 karakterlik tireli biçim üretiyordu ve parseControl mesajı sessizce reddediyordu: HİÇBİR MESAJ ULAŞMIYORDU. Büyük harf de reddedilir.",
+      "cases": [
+        {
+          "id": "transferId-shape",
+          "kind": "transferIdShape",
+          "aciklama": "128 üretimin hepsi 32 karakter, yalnız [a-f0-9] ve birbirinden farklı olmalı.",
+          "expect": { "length": 32, "alphabet": "0123456789abcdef", "uniqueSamples": 128 }
+        },
+        {
+          "id": "transferId-valid-lower-hex",
+          "kind": "transferId",
+          "aciklama": "Doğru biçim: 32 küçük harf hex.",
+          "value": "9f2c1b7e4a554d3c8b216e0f7a9c1d34",
+          "expect": true
+        },
+        {
+          "id": "transferId-valid-all-zero",
+          "kind": "transferId",
+          "aciklama": "Sıfır dolu kimlik biçim olarak geçerlidir (olasılık sıfır ama ayrıştırıcıyı reddetmez).",
+          "value": "00000000000000000000000000000000",
+          "expect": true
+        },
+        {
+          "id": "transferId-reject-uuid-with-dashes",
+          "kind": "transferId",
+          "aciklama": "ÜRETİM HATASI: crypto.randomUUID() çıktısı 36 karakter ve tireli. parseControl reddeder, mesaj hiç işlenmez.",
+          "value": "9f2c1b7e-4a55-4d3c-8b21-6e0f7a9c1d34",
+          "expect": false
+        },
+        {
+          "id": "transferId-reject-31-chars",
+          "kind": "transferId",
+          "aciklama": "Bir karakter eksik: reddedilir.",
+          "value": "9f2c1b7e4a554d3c8b216e0f7a9c1d3",
+          "expect": false
+        },
+        {
+          "id": "transferId-reject-33-chars",
+          "kind": "transferId",
+          "aciklama": "Bir karakter fazla: reddedilir.",
+          "value": "9f2c1b7e4a554d3c8b216e0f7a9c1d344",
+          "expect": false
+        },
+        {
+          "id": "transferId-reject-uppercase",
+          "kind": "transferId",
+          "aciklama": "Büyük hex reddedilir; karşılaştırma küçük harfe duyarlıdır, böylece id karşılaştırmaları da aynı metni kullanır.",
+          "value": "9F2C1B7E4A554D3C8B216E0F7A9C1D34",
+          "expect": false
+        },
+        {
+          "id": "transferId-reject-non-hex",
+          "kind": "transferId",
+          "aciklama": "g/z gibi hex dışı harf reddedilir.",
+          "value": "9f2c1b7g4a554d3c8b216e0f7a9c1d34",
+          "expect": false
+        },
+        {
+          "id": "transferId-reject-empty",
+          "kind": "transferId",
+          "aciklama": "Boş kimlik reddedilir: eksik alan sessizce kabul edilirse mesaj eşleşmesi kaybolur.",
+          "value": "",
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "identityPayload",
+      "aciklama": "Kimlik zarfı. publicKey 32 bayt (43 karakter), signature 64 bayt (86 karakter) ve İKİ base64 alfabesi de kabul edilir: Rust STANDARD_NO_PAD ('+', '/') ve tarayıcı base64url ('-', '_'). Sadece base64url kabul etmek, üretimde eşleşmelerin ~%93'ünü sessizce öldürdü: (62/64)^86 ~= %7. Doğrulama yine de her iki uçta yerel Ed25519 ile yapılır; buradaki eşleşme yalnız ŞEKİL kontrolüdür.",
+      "cases": [
+        {
+          "id": "identity-standard-plus",
+          "kind": "payload",
+          "aciklama": "publicKey içinde '+' var, '/' yok: Rust'in STANDARD_NO_PAD çıktısı. KABUL EDİLMELİ.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-standard-slash",
+          "kind": "payload",
+          "aciklama": "publicKey içinde '/' var, '+' yok: yine STANDARD_NO_PAD. KABUL EDİLMELİ.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "u/moZytsB3SvD2zAXpUVvM12nxUe7TdZV0MT2PVLHM4",
+            "signature": "ygFu3UHf1TWiTBJRrvHBqiwxSbAI9qjBvs5uW/g3CZN0N0HGKTEDj6v0Y/rMFt34hYHdFBVMgGRozZnDvO34Pg"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-standard-both",
+          "kind": "payload",
+          "aciklama": "İki karakter de geçen tek örnek; 32 baytın neredeyse tamamı her iki özel karakteri de içerir.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc/CYVmI4pR0gN0EtGGOuvw1Hwg+iOw44GlA7QmE",
+            "signature": "xkSp3W3Uta++d07vYcqk6TjgXFTk9LIdhl/ghMjLv2sdpqzsRtqvKha82Gp3ROpirnw80tw73VLFFPhs1ol47A"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-urlsafe",
+          "kind": "payload",
+          "aciklama": "base64url çifti de kabul edilir; 0.1.x öncesi tarayıcı kimlikleri bu biçimdeydi.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-legacy-no-session",
+          "kind": "payload",
+          "aciklama": "session ALANININ OLMASI geçerlidir: yeniden bağlanma öncesi sürümler (0.1.0-0.1.3) alanı hiç göndermedi. Alan eklemek eski istemcileri düşürmez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "1DHx4MnWYP3qxJMQckCIDgJaDxkJA8y0ZF2AN0hTioQ",
+            "signature": "JBccb9ZqkwfAkbBmV5lNdmM7kH4BE4946hA2qPQsZmvWXWBOMc1iYM1HkMoh8hadFkKM7A4smxshm994pyENCA"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-with-session",
+          "kind": "payload",
+          "aciklama": "Yeniden bağlanma oturumu: 43 karakterlik base64url 'session'. İmza metni bu oturuma bağlıdır, oda posta kutusu olmadığı için el sıkışma canlı üzerinden tekrarlanır.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "1DHx4MnWYP3qxJMQckCIDgJaDxkJA8y0ZF2AN0hTioQ",
+            "signature": "JBccb9ZqkwfAkbBmV5lNdmM7kH4BE4946hA2qPQsZmvWXWBOMc1iYM1HkMoh8hadFkKM7A4smxshm994pyENCA",
+            "session": "n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+          },
+          "expect": true
+        },
+        {
+          "id": "identity-reject-key-42",
+          "kind": "payload",
+          "aciklama": "42 karakterlik publicKey reddedilir; 32 baytın ham base64'ı 43 karakterdir, padding'siz.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-signature-85",
+          "kind": "payload",
+          "aciklama": "85 karakterlik imza reddedilir; 64 bayt padding'siz 86 karakterdir.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc",
+            "signature": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-pad-equals",
+          "kind": "payload",
+          "aciklama": "'=' dolgusu reddedilir; iki istemci de padding'siz üretir.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-non-base64",
+          "kind": "payload",
+          "aciklama": "Nokta gibi iki alfabenin dışındaki karakter reddedilir; sunucu yalnız ŞEKİL kontrolü yapar.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-missing-signature",
+          "kind": "payload",
+          "aciklama": "İmzasız kimlik reddedilir; kimlik zarfının imzası olmazsa olmaz.",
+          "payload": { "kind": "identity", "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc" },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-wrong-type",
+          "kind": "payload",
+          "aciklama": "publicKey sayı olamaz; tip kontrolü zorunludur.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": 1,
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-session-44",
+          "kind": "payload",
+          "aciklama": "44 karakterlik session reddedilir; 32 baytın base64url'i 43 karakterdir.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg",
+            "session": "cccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-session-standard-b64",
+          "kind": "payload",
+          "aciklama": "session '+' veya '/' içeremez: yalnız base64url kabul edilir. Anahtar/imza iki alfebeyi de kabul ederken oturumun tek alfabe taşıması kasıtlıdır; oturum bir URL sorgu değeri olarak da gezer.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg",
+            "session": "cccccccccccccccccccccccccccccccccccccccccc+"
+          },
+          "expect": false
+        },
+        {
+          "id": "identity-reject-session-explicit-null",
+          "kind": "payload",
+          "aciklama": "session OLMASI ile session'ın null OLMASI farklıdır. Worker `session === undefined || (typeof string && OPAQUE_ID.test(...))` diyor, yani null reddedilir. Dart'ta `map['session']` alınamayan anahtar ile null olan anahtarı ayırt EDEMEDİĞİ için istemci null'ı da reddetmek zorunda; aksi halde Worker'dan sessizce ayrılır.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "ocBf7Y0Cr+t0WkRwS+uhapiSLxEz2KP9SSileaNDrxc",
+            "signature": "9NvX15EZy28o5rdpfPx6lC2gXrSnAS1+VuGE5R1zaJoHhRjOPd8iOzjsuWQ5mEca9npAQJc0N9DiFzQfswxFXg",
+            "session": null
+          },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "offerAnswerPayload",
+      "aciklama": "SDP zarfı: TAM OLARAK {kind, sdp}. Üçüncü bir anahtar (örneğin dosya adı) reddedilir, çünkü içerik tüneli kapısıdır. SDP 1..32768 karakter arasında olmalıdır.",
+      "cases": [
+        {
+          "id": "offer-truncated-shape",
+          "kind": "payload",
+          "aciklama": "Kısaltılmış ama gerçek biçimli teklif: sürüm, kaynak, oturum adı, zaman ve datachannel medya satırı.",
+          "payload": {
+            "kind": "offer",
+            "sdp": "v=0\r\no=- 4611731400430051336 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:4ZcD\r\n"
+          },
+          "expect": true
+        },
+        {
+          "id": "answer-truncated-shape",
+          "kind": "payload",
+          "aciklama": "Yanıt aynı biçimdedir; 'answer' da 'offer' ile aynı anahtar sayısı kuralına tabidir.",
+          "payload": {
+            "kind": "answer",
+            "sdp": "v=0\r\no=- 6843294716283471847 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=ice-ufrag:9kQf\r\n"
+          },
+          "expect": true
+        },
+        {
+          "id": "offer-minimum-sdp",
+          "kind": "payload",
+          "aciklama": "En küçük geçerli SDP: 'v=0\\r\\n'.",
+          "payload": { "kind": "offer", "sdp": "v=0\r\n" },
+          "expect": true
+        },
+        {
+          "id": "offer-reject-empty-sdp",
+          "kind": "payload",
+          "aciklama": "Boş SDP reddedilir; karşı tarafın oturumu açılacak bir şeyi yok demektir.",
+          "payload": { "kind": "offer", "sdp": "" },
+          "expect": false
+        },
+        {
+          "id": "offer-reject-extra-key",
+          "kind": "payload",
+          "aciklama": "{kind, sdp, file} reddedilir: üçüncü anahtar kabul edilmez.",
+          "payload": { "kind": "offer", "sdp": "v=0", "file": "not-allowed" },
+          "expect": false
+        },
+        {
+          "id": "answer-reject-number-sdp",
+          "kind": "payload",
+          "aciklama": "SDP bir sayı olamaz: tip kontrolü zorunlu, aksi hâlde sunucu hata mesajı çöker.",
+          "payload": { "kind": "answer", "sdp": 42 },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "icePayload",
+      "aciklama": "ICE adayı zarfı: {kind, candidate}. candidate nesnesinde YALNIZCA dört anahtar olabilir: candidate, sdpMid, sdpMLineIndex, usernameFragment. Fazlası reddedilir.",
+      "cases": [
+        {
+          "id": "ice-full-candidate",
+          "kind": "payload",
+          "aciklama": "Dört anaşarlı gerçek biçimli aday (srflx).",
+          "payload": {
+            "kind": "ice",
+            "candidate": {
+              "candidate": "candidate:842163049 1 udp 1677734911 192.168.1.42 54321 typ srflx raddr 192.168.1.42 rport 54321 generation 0 ufrag 4ZcD network-id 1",
+              "sdpMid": "0",
+              "sdpMLineIndex": 0,
+              "usernameFragment": "4ZcD"
+            }
+          },
+          "expect": true
+        },
+        {
+          "id": "ice-null-optional-fields",
+          "kind": "payload",
+          "aciklama": "sdpMid/sdpMLineIndex null olabilir: WebRTC bunu aday toplama tamamlanmadan önce yapar.",
+          "payload": {
+            "kind": "ice",
+            "candidate": { "candidate": "candidate:1 1 udp 1 127.0.0.1 9 typ host", "sdpMid": null, "sdpMLineIndex": null }
+          },
+          "expect": true
+        },
+        {
+          "id": "ice-reject-unknown-key",
+          "kind": "payload",
+          "aciklama": "Bilinmeyen anahtar reddedilir; aday nesnesi de beyaz listelidir.",
+          "payload": {
+            "kind": "ice",
+            "candidate": {
+              "candidate": "candidate:1 1 udp 1 127.0.0.1 9 typ host",
+              "sdpMid": "0",
+              "sdpMLineIndex": 0,
+              "usernameFragment": "abcd",
+              "unknown": "x"
+            }
+          },
+          "expect": false
+        },
+        {
+          "id": "ice-reject-negative-index",
+          "kind": "payload",
+          "aciklama": "Negatif medya indeksi reddedilir.",
+          "payload": { "kind": "ice", "candidate": { "candidate": "c", "sdpMLineIndex": -1 } },
+          "expect": false
+        },
+        {
+          "id": "ice-reject-fractional-index",
+          "kind": "payload",
+          "aciklama": "Ondalık medya indeksi reddedilir; tamsayı olmalıdır.",
+          "payload": { "kind": "ice", "candidate": { "candidate": "c", "sdpMLineIndex": 1.5 } },
+          "expect": false
+        },
+        {
+          "id": "ice-reject-candidate-null",
+          "kind": "payload",
+          "aciklama": "null aday reddedilir; aday nesnesi olmadan karşı taraf yığın izi çöker.",
+          "payload": { "kind": "ice", "candidate": null },
+          "expect": false
+        },
+        {
+          "id": "ice-reject-candidate-array",
+          "kind": "payload",
+          "aciklama": "Dizi aday reddedilir; aday bir nesne olmalı, dizi kabul edilmez.",
+          "payload": { "kind": "ice", "candidate": [] },
+          "expect": false
+        },
+        {
+          "id": "ice-reject-payload-extra-key",
+          "kind": "payload",
+          "aciklama": "Zarfın kendisine fazladan anahtar eklenemez.",
+          "payload": { "kind": "ice", "candidate": { "candidate": "c" }, "extra": 1 },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "relayEnvelope",
+      "aciklama": "Zarfın kendisi yalnız {type:'relay', payload}. 'presence', 'room' ve 'ready' sunucudan gelen ve istemciye iletilmez; istemci bunları ASLA göndermez.",
+      "cases": [
+        {
+          "id": "envelope-identity",
+          "kind": "relayEnvelope",
+          "aciklama": "Tam kimlik zarfı kabul edilir: type, kind, publicKey ve signature.",
+          "value": {
+            "type": "relay",
+            "payload": {
+              "kind": "identity",
+              "publicKey": "iIgWc/CYVmI4pR0gN0EtGGOuvw1Hwg+iOw44GlA7QmE",
+              "signature": "xkSp3W3Uta++d07vYcqk6TjgXFTk9LIdhl/ghMjLv2sdpqzsRtqvKha82Gp3ROpirnw80tw73VLFFPhs1ol47A"
+            }
+          },
+          "expect": true
+        },
+        {
+          "id": "envelope-offer",
+          "kind": "relayEnvelope",
+          "aciklama": "Teklif zarfı kabul edilir: type ve payload'da kind ile sdp.",
+          "value": { "type": "relay", "payload": { "kind": "offer", "sdp": "v=0\r\n" } },
+          "expect": true
+        },
+        {
+          "id": "envelope-reject-not-object",
+          "kind": "relayEnvelope",
+          "aciklama": "Dize, sayı, null, dizi ve nesne olmayan hiçbir şey kabul edilmez.",
+          "value": "relay",
+          "expect": false
+        },
+        {
+          "id": "envelope-reject-missing-payload",
+          "kind": "relayEnvelope",
+          "aciklama": "payload'sız zarf reddedilir; type yetmez, taşınacak bir şey gerekir.",
+          "value": { "type": "relay" },
+          "expect": false
+        },
+        {
+          "id": "envelope-reject-wrong-type",
+          "kind": "relayEnvelope",
+          "aciklama": "type 'presence' reddedilir; istemci yalnız relay gönderir.",
+          "value": { "type": "presence", "peers": 1 },
+          "expect": false
+        },
+        {
+          "id": "envelope-reject-chat-content",
+          "kind": "relayEnvelope",
+          "aciklama": "İçerik reddi: sohbet metni sinyalleşme kanalına giremez.",
+          "value": { "type": "relay", "payload": { "kind": "chat", "text": "mesaj" } },
+          "expect": false
+        },
+        {
+          "id": "envelope-reject-file-content",
+          "kind": "relayEnvelope",
+          "aciklama": "İçerik reddi: dosya baytları kanalda taşınamaz.",
+          "value": { "type": "relay", "payload": { "kind": "file", "bytes": "x" } },
+          "expect": false
+        },
+        {
+          "id": "envelope-reject-empty-payload",
+          "kind": "relayEnvelope",
+          "aciklama": "Boş payload reddedilir; kind olmayan bir nesne hiçbir işe yaramaz.",
+          "value": { "type": "relay", "payload": {} },
+          "expect": false
+        }
+      ]
+    },
+    {
+      "id": "incomingMessage",
+      "aciklama": "Sunucudan gelen ham baytın istemci tarafındaki karşılığı. 'signal', 'presence' ve 'closeCode' null ise O OLAY TETİKLENMEDİ demektir. Ayrıştırılamayan veya 'type' alanı olmayan her mesaj soketi 1003 ile kapatır: sessizce yutmak, kullanıcıyı 'bağlanamadı' sanmaya bırakır.",
+      "cases": [
+        {
+          "id": "incoming-empty-string",
+          "kind": "incoming",
+          "aciklama": "Boş bayt hâlâ bozuk zarf sayılır.",
+          "raw": "",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-truncated-json",
+          "kind": "incoming",
+          "aciklama": "Yarım JSON bozuk zarf sayılır ve soket 1003 ile kapatılır.",
+          "raw": "{\"type\":\"relay\",",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-json-null",
+          "kind": "incoming",
+          "aciklama": "null bir nesne değildir: sessizce yutulmaz, soket 1003 ile kapatılır.",
+          "raw": "null",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-json-number",
+          "kind": "incoming",
+          "aciklama": "Sayı bir nesne değildir: sessizce yutulmaz, soket 1003 ile kapatılır.",
+          "raw": "7",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-json-string",
+          "kind": "incoming",
+          "aciklama": "Dize bir nesne değildir: sessizce yutulmaz, soket 1003 ile kapatılır.",
+          "raw": "\"relay\"",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-json-array",
+          "kind": "incoming",
+          "aciklama": "Dizi bir nesnedir ama 'type' alanı yoktur; bu yüzden 1003 ile kapanır.",
+          "raw": "[]",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-object-without-type",
+          "kind": "incoming",
+          "aciklama": "type alanı olmayan nesne: 1003. Sunucu bunu asla göndermez, gönderdiyse sözleşme bozulmuştur.",
+          "raw": "{\"peers\":1}",
+          "expect": { "closeCode": 1003, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-relay-offer",
+          "kind": "incoming",
+          "aciklama": "Geçerli teklif: onSignal'e tek bir sinyal gider, soket açık kalır.",
+          "raw": "{\"type\":\"relay\",\"payload\":{\"kind\":\"offer\",\"sdp\":\"v=0\\r\\n\"}}",
+          "expect": { "closeCode": null, "signal": "offer", "presence": null }
+        },
+        {
+          "id": "incoming-relay-identity-legacy",
+          "kind": "incoming",
+          "aciklama": "session'sız (eski) kimlik zarfı da kabul edilir.",
+          "raw": "{\"type\":\"relay\",\"payload\":{\"kind\":\"identity\",\"publicKey\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE\",\"signature\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ\"}}",
+          "expect": { "closeCode": null, "signal": "identity", "presence": null }
+        },
+        {
+          "id": "incoming-room-presence",
+          "kind": "incoming",
+          "aciklama": "PairingRoom açılışta {type:'room', peers} gönderir: odada kaç kişi var.",
+          "raw": "{\"type\":\"room\",\"peers\":0}",
+          "expect": { "closeCode": null, "signal": null, "presence": 0 }
+        },
+        {
+          "id": "incoming-presence-one",
+          "kind": "incoming",
+          "aciklama": "presence.peers karşı tarafı sayar.",
+          "raw": "{\"type\":\"presence\",\"peers\":1}",
+          "expect": { "closeCode": null, "signal": null, "presence": 1 }
+        },
+        {
+          "id": "incoming-ready-online",
+          "kind": "incoming",
+          "aciklama": "PeerRendezvous açılışta {type:'ready', online} gönderir. online KENDİNİ de sayar: eş varsa online > 1.",
+          "raw": "{\"type\":\"ready\",\"online\":2}",
+          "expect": { "closeCode": null, "signal": null, "presence": 2 }
+        },
+        {
+          "id": "incoming-presence-without-count",
+          "kind": "incoming",
+          "aciklama": "Sayı taşımayan presence: 0. 'eş yok' ile 'bilinmiyor' arasındaki fark arayüzde kasıtlı olarak yok.",
+          "raw": "{\"type\":\"presence\"}",
+          "expect": { "closeCode": null, "signal": null, "presence": 0 }
+        },
+        {
+          "id": "incoming-presence-online-only",
+          "kind": "incoming",
+          "aciklama": "peers yoksa online kullanılır; iki alan da sunucu tarafından üretilebilir.",
+          "raw": "{\"type\":\"presence\",\"online\":3}",
+          "expect": { "closeCode": null, "signal": null, "presence": 3 }
+        },
+        {
+          "id": "incoming-peers-null-falls-through",
+          "kind": "incoming",
+          "aciklama": "peers null ise online'a düşülür; null 'bilinmiyor' demektir.",
+          "raw": "{\"type\":\"room\",\"peers\":null,\"online\":9}",
+          "expect": { "closeCode": null, "signal": null, "presence": 9 }
+        },
+        {
+          "id": "incoming-peers-wins-over-online",
+          "kind": "incoming",
+          "aciklama": "İki alan da varsa peers kazanır.",
+          "raw": "{\"type\":\"room\",\"peers\":1,\"online\":9}",
+          "expect": { "closeCode": null, "signal": null, "presence": 1 }
+        },
+        {
+          "id": "incoming-unknown-type-ignored",
+          "kind": "incoming",
+          "aciklama": "Bilinmeyen type sessizce yok sayılır; istemci çökmez ve soketi de kapatmaz (ileri uyum).",
+          "raw": "{\"type\":\"heartbeat\"}",
+          "expect": { "closeCode": null, "signal": null, "presence": null }
+        },
+        {
+          "id": "incoming-non-string-type-ignored",
+          "kind": "incoming",
+          "aciklama": "type alanı var ama dize değil: 'type' alanının VARLIĞI tek sınattır, bu yüzden yok sayılır. Zarf 1003 ile kapanmaz.",
+          "raw": "{\"type\":42}",
+          "expect": { "closeCode": null, "signal": null, "presence": null }
+        }
+      ]
+    },
+    {
+      "id": "url",
+      "aciklama": "URL kurulumu. Yol SABİTTİR (/v1/rendezvous veya /v1/peer), bu yüzden uç noktanın kendi yolu ve sorgusu atılır. Sorgu değerleri URLSearchParams ile kodlanır: '+' '%2B', '/' '%2F' olur. 'expect' bir dizeyse tam URL beklenir; 'expectError' bir dizeyse bağlantı sözleşmesinin Türkçe hatası beklenir.",
+      "cases": [
+        {
+          "id": "url-https-default",
+          "kind": "url",
+          "aciklama": "Varsayılan üretim ucu: https -> wss.",
+          "api": "connect",
+          "endpoint": "https://signal.example",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-trailing-slash",
+          "kind": "url",
+          "aciklama": "Sonlu eğik çizgi sonucu değiştirmez.",
+          "api": "connect",
+          "endpoint": "https://signal.example/",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-http-local",
+          "kind": "url",
+          "aciklama": "Yerel geliştirme ucu: http -> ws. Üretimde kullanılmaz.",
+          "api": "connect",
+          "endpoint": "http://127.0.0.1:8787",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "ws://127.0.0.1:8787/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-path-replaced",
+          "kind": "url",
+          "aciklama": "Uç noktada yol varsa DEĞİŞTİRİLİR: yol sabittir, uç noktanın yolu kullanılmaz.",
+          "api": "connect",
+          "endpoint": "https://signal.example/base/path",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-query-dropped",
+          "kind": "url",
+          "aciklama": "Uç noktanın sorgusu ATILIR. Worker koddan Durable Object adına göre yönlendirir; bir sorgu taşıyıcısı kastedildiyse bu sessizce kaybolur.",
+          "api": "connect",
+          "endpoint": "https://signal.example/base?token=a%2Bb",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-fragment-dropped",
+          "kind": "url",
+          "aciklama": "Parça (#) ve sorgu birlikte atılır.",
+          "api": "connect",
+          "endpoint": "https://signal.example/deep/path?q=1#frag",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-port-preserved",
+          "kind": "url",
+          "aciklama": "Port korunur; yerel wrangler denemesinde gereklidir.",
+          "api": "connect",
+          "endpoint": "https://signal.example:8787/base?a=1",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example:8787/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-replace-existing-code-param",
+          "kind": "url",
+          "aciklama": "Aynı ada sahip sorgu parametresi DEĞİŞTİRİLİR, ikinci bir 'code' üretilmez. İki 'code' olsaydı Worker hangisini okuyacağını bilemezdi.",
+          "api": "connect",
+          "endpoint": "https://signal.example/?code=OLD",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-scheme-and-host-lowercased",
+          "kind": "url",
+          "aciklama": "Şema ve sunucu adı küçük harfe iner (URL standardı).",
+          "api": "connect",
+          "endpoint": "HTTPS://Signal.Example/Path",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-wss-endpoint-stays-tls",
+          "kind": "url",
+          "aciklama": "Kullanıcı ayarlarda zaten 'wss://' yazdıysa şema düşürülmemelidir. Sadece 'https' kontrol eden bir eşleme, TLS'i sessizce düşürür ve signaling trafiğini açığa çıkarır.",
+          "api": "connect",
+          "endpoint": "wss://signal.example",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-https-default-port-dropped",
+          "kind": "url",
+          "aciklama": "Şemanın varsayılan portu (443) yazılmaz; URL standardı bunu normalize eder, elle birleştiren iki taraf burada ayrışırdı.",
+          "api": "connect",
+          "endpoint": "https://signal.example:443/base?a=1",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "wss://signal.example/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-ws-endpoint-stays-plaintext",
+          "kind": "url",
+          "aciklama": "ws:// ucu ws:// olarak kalır. Hiçbir uç nokta şeması sessizce YÜKSELTİLMEZ; yalnızca https -> wss eşlemesi vardır.",
+          "api": "connect",
+          "endpoint": "ws://127.0.0.1:8787/dev",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "ws://127.0.0.1:8787/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-ws-default-port-dropped",
+          "kind": "url",
+          "aciklama": "ws şemasının varsayılan portu (80) de yazılmaz.",
+          "api": "connect",
+          "endpoint": "ws://127.0.0.1:80/dev",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expect": "ws://127.0.0.1/v1/rendezvous?code=K7M4P2X9Q6TRH"
+        },
+        {
+          "id": "url-peer-urlsafe-ids",
+          "kind": "url",
+          "aciklama": "Yeniden bağlanma: pair ve device sorguya eklenir, ikisi de 43 karakterlik base64url.",
+          "api": "connectKnown",
+          "endpoint": "https://signal.example",
+          "params": {
+            "pair": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4",
+            "device": "n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+          },
+          "expect": "wss://signal.example/v1/peer?pair=hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4&device=n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+        },
+        {
+          "id": "url-peer-with-endpoint-query",
+          "kind": "url",
+          "aciklama": "Uç noktada sorgu olsa da /v1/peer sorgusu yalnız pair ve device içerir.",
+          "api": "connectKnown",
+          "endpoint": "https://signal.example/x?y=1",
+          "params": {
+            "pair": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4",
+            "device": "n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+          },
+          "expect": "wss://signal.example/v1/peer?pair=hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4&device=n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+        },
+        {
+          "id": "url-peer-standard-base64-ids-percent-encoded",
+          "kind": "url",
+          "aciklama": "Standart base64 kimliklerinde '+' ve '/' yüzde kodlanır. Bu, '93% eşleşme ölü' sınıfının İKİNCİ yarısıdır: '+' ham bırakılırsa sunucu onu boşluk okur ve kimlik 400 döner.",
+          "api": "connectKnown",
+          "endpoint": "https://signal.example",
+          "params": {
+            "pair": "hrzwNhe8y7yIt6c/++iyTHaXHzZ2mto1xRd/0YmNhn4",
+            "device": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4"
+          },
+          "expect": "wss://signal.example/v1/peer?pair=hrzwNhe8y7yIt6c%2F%2B%2BiyTHaXHzZ2mto1xRd%2F0YmNhn4&device=hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4"
+        },
+        {
+          "id": "url-error-no-scheme",
+          "kind": "url",
+          "aciklama": "Şemasız uç nokta ham bir TypeError/FormatException DEĞİL, sözleşmenin Türkçe hatasını vermelidir.",
+          "api": "connect",
+          "endpoint": "signal.example",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        },
+        {
+          "id": "url-error-not-a-url",
+          "kind": "url",
+          "aciklama": "Serbest metin: aynı Türkçe hata.",
+          "api": "connect",
+          "endpoint": "not-a-url",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        },
+        {
+          "id": "url-error-empty",
+          "kind": "url",
+          "aciklama": "Boş uç nokta: aynı Türkçe hata, çökme değil.",
+          "api": "connect",
+          "endpoint": "",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        },
+        {
+          "id": "url-error-no-host",
+          "kind": "url",
+          "aciklama": "Ana bilgisayarsız uç nokta reddedilir; sessizce yerel bir yola bağlanmak daha kötüdür.",
+          "api": "connect",
+          "endpoint": "https://",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        },
+        {
+          "id": "url-error-port-without-host",
+          "kind": "url",
+          "aciklama": "Port var ama ana bilgisayar yok: reddedilir.",
+          "api": "connect",
+          "endpoint": "https://:99/x",
+          "params": { "code": "K7M4P2X9Q6TRH" },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        },
+        {
+          "id": "url-error-peer-no-scheme",
+          "kind": "url",
+          "aciklama": "connectKnown de aynı sözleşmeyi paylaşır.",
+          "api": "connectKnown",
+          "endpoint": "not-a-url",
+          "params": {
+            "pair": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4",
+            "device": "n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+          },
+          "expectError": "Signaling sunucusuna bağlanılamadı."
+        }
+      ]
+    },
+    {
+      "id": "queryEncoding",
+      "aciklama": "Tek bir sorgu değerinin tel üzerindeki kodlanmış hâli. İki uygulama da URLSearchParams ile birebir aynı sonucu vermeli; sapma, sunucunun '+' harfi 'boşluk' okumasına yol açar.",
+      "cases": [
+        {
+          "id": "encode-unreserved",
+          "kind": "queryEncoding",
+          "aciklama": "Harf, rakam, '-', '_', '.' ham kalır.",
+          "input": "K7M4P2X9Q6TRH-_.az09",
+          "expect": "K7M4P2X9Q6TRH-_.az09"
+        },
+        {
+          "id": "encode-base64url-opaque-id",
+          "kind": "queryEncoding",
+          "aciklama": "43 karakterlik base64url kimlik tamamen ham kalır; üretimde her yeniden bağlanma bunu gönderir.",
+          "input": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4",
+          "expect": "hrzwNhe8y7yIt6c_--iyTHaXHzZ2mto1xRd_0YmNhn4"
+        },
+        {
+          "id": "encode-plus-and-slash",
+          "kind": "queryEncoding",
+          "aciklama": "'+' -> %2B ve '/' -> %2F. Ham bırakılırsa sunucu '+' ı boşluğa çevirir ve kimlik bozulur.",
+          "input": "+/",
+          "expect": "%2B%2F"
+        },
+        {
+          "id": "encode-standard-base64-id",
+          "kind": "queryEncoding",
+          "aciklama": "Standart base64 kimliğin tamamı: yalnız '/' ve '+' yüzde kodlanır.",
+          "input": "hrzwNhe8y7yIt6c/++iyTHaXHzZ2mto1xRd/0YmNhn4",
+          "expect": "hrzwNhe8y7yIt6c%2F%2B%2BiyTHaXHzZ2mto1xRd%2F0YmNhn4"
+        },
+        {
+          "id": "encode-space",
+          "kind": "queryEncoding",
+          "aciklama": "Boşluk '+' olur (form kodlaması), %20 değil.",
+          "input": "a b",
+          "expect": "a+b"
+        },
+        {
+          "id": "encode-percent",
+          "kind": "queryEncoding",
+          "aciklama": "'%' kaçış karakteridir ve kendisi kodlanır; çift kodlama olmaz.",
+          "input": "a%b",
+          "expect": "a%25b"
+        },
+        {
+          "id": "encode-separators",
+          "kind": "queryEncoding",
+          "aciklama": "'&', '=', '?', '#' ve ':' ayraç oldukları için kodlanır.",
+          "input": "a&b=c?d#e:f",
+          "expect": "a%26b%3Dc%3Fd%23e%3Af"
+        },
+        {
+          "id": "encode-utf8",
+          "kind": "queryEncoding",
+          "aciklama": "Baytlar UTF-8 olarak büyük harf yüzde kodlanır. Sorgu değerlerinde ASCII dışı metin olmamalıdır; yine de iki taraf aynı sonucu vermek zorundadır.",
+          "input": "çğü",
+          "expect": "%C3%A7%C4%9F%C3%BC"
+        }
+      ]
+    },
+    {
+      "id": "relayOutbound",
+      "aciklama": "İstemcinin gönderdiği baytın TAM metni. Anahtar sırası da sözleşmedir: iki uygulama farklı sırada üretirse ham bayt karşılaştırması kırılır. Sadece ASCII kullanılır.",
+      "cases": [
+        {
+          "id": "outbound-offer",
+          "kind": "relayOutbound",
+          "aciklama": "Teklif: {type,payload:{kind,sdp}}.",
+          "payload": { "kind": "offer", "sdp": "v=0\r\n" },
+          "expect": "{\"type\":\"relay\",\"payload\":{\"kind\":\"offer\",\"sdp\":\"v=0\\r\\n\"}}"
+        },
+        {
+          "id": "outbound-answer",
+          "kind": "relayOutbound",
+          "aciklama": "Yanıt teklifle birebir aynı biçimdedir; sadece kind değeri değişir.",
+          "payload": { "kind": "answer", "sdp": "v=0\r\n" },
+          "expect": "{\"type\":\"relay\",\"payload\":{\"kind\":\"answer\",\"sdp\":\"v=0\\r\\n\"}}"
+        },
+        {
+          "id": "outbound-identity-legacy",
+          "kind": "relayOutbound",
+          "aciklama": "session OLANA YAZILMAZ; eski zarfın baytları birebir korunur.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ"
+          },
+          "expect": "{\"type\":\"relay\",\"payload\":{\"kind\":\"identity\",\"publicKey\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE\",\"signature\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ\"}}"
+        },
+        {
+          "id": "outbound-identity-with-session",
+          "kind": "relayOutbound",
+          "aciklama": "session var olduğunda sonda yazılır; anahtar sırası değişmez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "session": "n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ"
+          },
+          "expect": "{\"type\":\"relay\",\"payload\":{\"kind\":\"identity\",\"publicKey\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE\",\"signature\":\"iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ\",\"session\":\"n_Q5sLUmI0XDbM6PDpIlnqt7jzphr2-R0zHsMNyV8zQ\"}}"
+        },
+        {
+          "id": "outbound-ice",
+          "kind": "relayOutbound",
+          "aciklama": "ICE adayında null alanlar YAZILMAZ; yalnız dolu alanlar sırayla gider.",
+          "payload": {
+            "kind": "ice",
+            "candidate": {
+              "candidate": "candidate:842163049 1 udp 1677734911 192.168.1.42 54321 typ srflx",
+              "sdpMid": "0",
+              "sdpMLineIndex": 0,
+              "usernameFragment": "4ZcD"
+            }
+          },
+          "expect": "{\"type\":\"relay\",\"payload\":{\"kind\":\"ice\",\"candidate\":{\"candidate\":\"candidate:842163049 1 udp 1677734911 192.168.1.42 54321 typ srflx\",\"sdpMid\":\"0\",\"sdpMLineIndex\":0,\"usernameFragment\":\"4ZcD\"}}}"
+        }
+      ]
+    },
+    {
+      "id": "forbiddenKey",
+      "aciklama": "forbiddenKeys listesindeki her anahtar, geçerli bir zarfın üstüne konduğunda REDDEDİLMELİDİR. Bu grup, 'Worker içerik taşımaz' deyişini çalıştırılabilir bir kurala çevirir.",
+      "cases": [
+        {
+          "id": "forbidden-text-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'text' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "text": "merhaba"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-bytes-on-offer",
+          "kind": "forbiddenKey",
+          "aciklama": "Teklif zarfına 'bytes' eklenemez.",
+          "payload": { "kind": "offer", "sdp": "v=0", "bytes": "AAECAw" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-data-on-offer",
+          "kind": "forbiddenKey",
+          "aciklama": "Teklif zarfına 'data' eklenemez.",
+          "payload": { "kind": "offer", "sdp": "v=0", "data": "AAECAw" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-file-on-offer",
+          "kind": "forbiddenKey",
+          "aciklama": "Teklif zarfına 'file' eklenemez.",
+          "payload": { "kind": "offer", "sdp": "v=0", "file": "f.jpg" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-message-on-answer",
+          "kind": "forbiddenKey",
+          "aciklama": "Yanıt zarfına 'message' eklenemez.",
+          "payload": { "kind": "answer", "sdp": "v=0", "message": "selam" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-ciphertext-on-ice",
+          "kind": "forbiddenKey",
+          "aciklama": "ICE zarfına 'ciphertext' eklenemez; şifreli içerik de içeriktir.",
+          "payload": { "kind": "ice", "candidate": { "candidate": "candidate:1 1 udp 1 127.0.0.1 9 typ host" }, "ciphertext": "AAAA" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-url-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'url' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "url": "https://kotu.example"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-channel-on-ice",
+          "kind": "forbiddenKey",
+          "aciklama": "ICE zarfına 'channel' eklenemez.",
+          "payload": { "kind": "ice", "candidate": { "candidate": "candidate:1 1 udp 1 127.0.0.1 9 typ host" }, "channel": "genel" },
+          "expect": false
+        },
+        {
+          "id": "forbidden-topic-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'topic' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "topic": "duyuru"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-name-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'name' eklenemez; görünen ad yerelde kalır.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "name": "Ayse"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-nickname-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'nickname' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "nickname": "ayse"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-rendezvous-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "'rendezvous' 0.1.5'te kaldırıldı; geri gelmesi de reddedilir.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "rendezvous": "abc"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-code-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'code' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "code": "K7M4P2X9Q6TRH"
+          },
+          "expect": false
+        },
+        {
+          "id": "forbidden-ttl-on-identity",
+          "kind": "forbiddenKey",
+          "aciklama": "Kimlik zarfına 'ttl' eklenemez.",
+          "payload": {
+            "kind": "identity",
+            "publicKey": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmE",
+            "signature": "iIgWc_CYVmI4pR0gN0EtGGOuvw1Hwg-iOw44GlA7QmGKtXpMU40DHi2Zq02o3gCElDCk6XkY36FE93SSRGq2aQ",
+            "ttl": 999999
+          },
+          "expect": false
+        }
+      ]
+    }
+  ]
+}
