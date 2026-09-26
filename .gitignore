@@ -53,9 +53,8 @@ spike/.flutter-plugins
 spike/.flutter-plugins-dependencies
 
 # --- Avenox second brain -----------------------------------------------------
-# The brain is the lead engineer's local memory. It must never reach a public
-# repository, so its managed files stay untracked. Durable decisions that belong
-# in public history live in docs/adr/ instead.
+# Beyin lead engineer'in YEREL hafizasidir; public repoya hicbir parcasi giremez.
+# Kalici kararlar public olarak docs/adr/ ve ROADMAP.md'de yasar, hafiza degil.
 .beyin-version
 .beyin-runtime.json
 .beyin-state/
@@ -64,5 +63,25 @@ AGENTS.md
 daily/
 notes/
 knowledge/
+beyin.py
+# Companion klasorunun adi onekli bir emoji ile basliyor; glob ile yakalaniyor.
+*Companion*/
 Beyni Guncelle.cmd
+Beyni Guncelle.sh
+Beyni Guncelle.command
 Beyni Guncelle.desktop
+
+# Ajan calisma zamani: skill'ler, hook'lar, script'ler. proje kodu degil.
+CLAUDE.md
+.claude/scripts/
+.claude/skills/
+.claude/hooks.json
+.claude/settings.local.json
+.claude/hermes-plugin/
+.codex/
+.omp/
+.opencode/plugins/
+
+# .claude/settings.json ajan izin listesi icerir (hangi komutlar calistirilabilir);
+# proje yapilandirmasi degil, kullanici ayari. Git'ten cikarildi.
+.claude/settings.json

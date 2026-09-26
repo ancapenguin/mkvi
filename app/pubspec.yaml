@@ -1,0 +1,42 @@
+name: mkvi
+description: "Hesapsız, sunucuda içerik tutmayan, iki kişi arasında doğrudan P2P iletişim uygulaması."
+publish_to: "none"
+
+# Tek sürüm kaynağı kökteki VERSION dosyasıdır; CI ikisinin eşleştiğini doğrular.
+# Sürümü burada da tutuyoruz çünkü Flutter bunu okuyor, ama VERSION ile aynı olmalı.
+version: 0.2.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Yerel tasarımın tek kaynağı design/tokens.json'dan üretilir.
+  # tokens.g.dart üretilmiş bir dosyadır; elle düzenlenmez.
+  cupertino_icons: ^1.0.8
+
+  # P2P taşıma. 1.6.2+hotfix.3, webrtc_interface 1.5.1 ile gelir.
+  flutter_webrtc: ^1.6.2
+
+  # Kimlik ve geçmiş anahtarı: masaüstünde OS kasası (Rust çekirdek yapar),
+  # Android'de platform kasası. Parola istemi yok.
+  flutter_secure_storage: ^11.2.0
+
+  # Uygulama veri dizini ve indirme klasörü: Rust çekirdek dosya yazımını
+  # sürücüden önce burada bulacak.
+  path_provider: ^2.1.5
+
+  # Güncelleme bildirimi ve indirme. Doğrulama Rust'ta (mkvi_core::update).
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
