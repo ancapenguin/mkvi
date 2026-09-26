@@ -67,7 +67,7 @@ için dosya/satır düzeyinde kök neden analizi.
 
 | # | Kusur | Kök neden | Durum |
 |---|---|---|---|
-| 1 | Kamera ve ekran paylaşımı hiç çalışmıyor | Tauri hiçbir WebView2 izin handler'ı kaydetmiyor; wry `msWebOOUI`'yi kapatıyor. Tauri 2.11.5'te API yok | Kök neden Flutter'a geçişle **ortadan kalkıyor**; spike kanıtlıyor (bkz. `spike/`) |
+| 1 | Kamera ve ekran paylaşımı hiç çalışmıyor | **İki ayrı neden.** (a) Tauri hiçbir WebView2 izin handler'ı kaydetmiyor, wry `msWebOOUI`'yi kapatıyor → izin reddi. (b) `flutter_webrtc` **kamera yokken hata vermiyor**: `GetUserVideo` track'siz, hatasız dönüyor, `getUserMedia` boş `videoTracks` ile "başarılı" diyor. Yani yalnız istisna yakalayan bir merdiven "kamerasız başarılı" olur ve hiçbir şey göndermez. | (a) Flutter'la **ortadan kalkıyor**. (b) Flutter'a **özgü yeni bir tuzak** — sessiz başarısızlık; `MediaController` sonucu ayrıca denetliyor, 115 test. `Helper.switchCamera` de Windows'ta hiç çalışmıyor (`NotImplemented`), port yeniden yakalama yapıyor. |
 | 2 | Görüntülü arama isteği sessizce sesliye düşüyor | İzin reddi `getUserMedia` zincirinde sessizce yutuluyordu | Kodda kısmen düzeltildi (`e567276`), **testi yok** |
 | 3 | Cevap ekranı yok, arama direkt açılıyor | 0.1.4'te otomatik kabul vardı; cevap ekranı hiç yayımlanmamıştı | Kod **var** (`e567276`) ama kullanıcı hiç görmedi, **testi yok** |
 | 4 | Yazılar okunmuyor | 17 WCAG ihlali; en kötüsü video placeholder ışık temada **1.17:1**, odak halkası vurguyla aynı (**1.00**) | **Testi yok** — `design/` kontrast testi yazılıyor |
