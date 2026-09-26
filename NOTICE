@@ -1,0 +1,42 @@
+MKVI
+Copyright 2026 MKVI contributors
+
+Bu ürün, MKVI katkıcıları tarafından geliştirilmiş yazılımı içerir.
+
+Uygulama (masaüstü istemcisi) aşağıdaki ikisinden biriyle lisanslıdır — siz seçersiniz:
+
+    Apache License, Version 2.0
+    MIT License
+
+Bu, "ikili lisans" (dual license) düzenidir. `LICENSE-APACHE` ve `LICENSE-MIT`
+dosyaları her iki lisansın da eksiksiz metnini içerir; hangisini seçtiğiniz
+dağıtımda belirtilmelidir.
+
+    Apache-2.0 metni:  ./LICENSE-APACHE
+    MIT metni:         ./LICENSE-MIT
+
+--------------------------------------------------------------------------------
+ÖNEMLİ: İki dizin farklı lisanslıdır
+--------------------------------------------------------------------------------
+
+Bu depodaki `cloudflare/` dizini (sinyalleşme sunucusu) **AGPL-3.0** ile lisanslıdır
+ve AGPL-3.0, uygulamanın lisansından farklıdır. AGPL'nin ağ sunucusu kapsamındaki
+"çalıştırılan programın kaynak kodunu uzaktan erişenlere sun" yükümlülüğü
+nedeniyle, bu dizini barındırma hizmeti olarak satmak/tekrar satmak lisansın
+şartlarına aykırı olur. Bu, kasıtlı bir seçimdir.
+
+    AGPL-3.0 metni:    ./cloudflare/LICENSE
+
+AGPL kapsamı yalnızca `cloudflare/` dizinindedir. Uygulamanın geri kalanı
+(React arayüzü, `crates/mkvi_core` Rust çekirdeği, `src-tauri` Tauri adaptörü,
+`app/` Flutter istemcisi) AGPL'ye tabi değildir.
+
+--------------------------------------------------------------------------------
+Üçüncü taraf yazılımlar
+--------------------------------------------------------------------------------
+
+Bu dağıtım, MIT / Apache-2.0 / BSD / ISC lisanslı üçüncü taraf paketlerini
+kullanır. Tamamı ve gerekçeleri için `THIRD-PARTY-NOTICES.md` dosyasına bakın.
+
+Üçüncü taraf yazılımların telif hakları ilgili sahiplerine aittir. MKVI
+bu paketlerin hiçbirini değiştirmediğini ve yeniden dağıtmadığını beyan eder.

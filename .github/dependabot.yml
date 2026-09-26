@@ -1,0 +1,47 @@
+# Dependabot, iki lockfile'ı ve iki Rust yüzeyini ayrı izler.
+# Kuyruk tek bakımcı tarafından yönetildiği için küçük tutulur.
+version: 2
+updates:
+  # --- JavaScript: uygulama (kök package.json / package-lock.json) ---
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # --- JavaScript: sinyalleşme Worker'ı (cloudflare/package.json) ---
+  # Ayrı bir lockfile: kökteki vitest/typescript sürümleriyle aynı değil.
+  - package-ecosystem: npm
+    directory: "/cloudflare"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+
+  # --- Rust: Tauri adaptörü (src-tauri/Cargo.toml) ---
+  - package-ecosystem: cargo
+    directory: "/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # --- Rust: çekirdek (crates/mkvi_core/Cargo.toml) ---
+  # mkvi_core BİR WORKSPACE ÜYESİ DEĞİL; kendi paketi ve kendi Cargo.lock
+  # dosyası var. Bu yüzden src-tauri'ın girdisi onu kapsamaz ve ayrı bir
+  # dependabot girdisi şarttır (bkz. crates/mkvi_core/Cargo.toml başındaki
+  # "Deliberately its own package, not a workspace member" notu).
+  # Dart/Flutter tarafı (app/pubspec.yaml) dependabot tarafından izlenmez;
+  # pub.dev paketleri için `dart` ekosistem ekosistemi kullanılamaz.
+  - package-ecosystem: cargo
+    directory: "/crates/mkvi_core"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # --- GitHub Actions ---
+  # publish-update.yml yayımlama yapıyor; güncellemeler yayımlama hattını
+  # etkileyebileceği için gözden geçirme gerekir.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

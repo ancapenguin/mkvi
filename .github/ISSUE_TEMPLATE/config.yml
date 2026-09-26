@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Güvenlik açığı bildirimi
+    url: https://github.com/ancapenguin/mkvi/blob/main/SECURITY.md
+    about: Güvenlik açıklarını herkese açık issue olarak AÇMAYIN. Deponun Security sekmesindeki "Report a vulnerability" kanalını kullanın; gizlidir ve yalnızca bakımcı görür.
+  - name: Bilinen sorunlar ve plan
+    url: https://github.com/ancapenguin/mkvi/blob/main/ROADMAP.md
+    about: Zaten bilinen kısıtlar, planlanan fazlar ve verilmiş kararlar burada. Sorununuz burada listelenmişse yeni issue açmak yerine yorum bırakın.
+  - name: Katkı rehberi ve dört komutluk gate
+    url: https://github.com/ancapenguin/mkvi/blob/main/CONTRIBUTING.md
+    about: Derleme/test için gerekenler, değişmez kurallar, fork alıyorsanız değiştirmeniz gereken dört string ve commit kuralları.
