@@ -169,11 +169,32 @@ kombinasyonlarında bozulmadan.
 - [ ] **Faz 1 güvenlik açığı kapatılır:** SAS ifadesi DTLS parmak izine bağlanır
       (SDP'den veya `getStats`'ten — spike gün 3 hangisini verirse). Sinyal
       sunucusunu kontrol eden biri artık iki tarafa da aynı ifadeyi gösteremez.
-- [ ] **`SetupState`:** ilkKurulum / yenidenBağlanıyor / bozuk. **Beyaz ekran yalnız ilk
-      kurulumda.**
+- [x] **`SetupState` + oturum denetleyicisi (saf Dart).** 79 test. Beyaz ekranın kök
+      nedeni yapısal olarak kapandı: eşleştirme ekranı **yalnız** `firstRun` ve
+      açık `needsPairing` durumlarından erişilebilir (`showsPairingScreen` tek
+      bekçi). Başarısız eş okuma, şifreleme hatası, anahtar kasası eksikliği ve
+      bozuk kayıt artık `broken(reason)` — eşleştirme ekranına düşmüyor, Türkçe
+      eyleme dönük sebep veriyor. Yeniden bağlanma: 700 ms → 12 s; **geçici kimlik
+      hatası döngüyü öldürmüyor** (eskiden kalıcı `return` vardı), bayat dönemin
+      sökümü yeni dönemin durumunu ezmiyor.
 - [ ] **Keyring hataları yüzeye çıkar**, sessizce yeni kimleme düşmez.
-- [ ] **İsimler:** ilan edilen ad yetkili, takma ad ikincil ve yalnız yerelde;
-      yeniden eşleşmede "Kişi"ye düşme yok.
+      *(Çekirdekte `KeyringEntryMissing` eklendi; Dart yüzeyi session'a bağlı.)*
+- [x] **İsimler:** ilan edilen ad yetkili, takma ad ikincil ve yalnız yerelde.
+      34 test: takma ad ne görünen adı ne de kaydedilen `display_name`'i
+      değiştiriyor, tel üzerinden **hiç** gitmiyor (serileştirilmiş çıktı
+      üzerinden iddia), bir eşin takma adı diğerine sızmıyor, yeniden eşleşmede
+      daha önce kayıtlı ad korunuyor.
+- [ ] **GERÇEK VERİ DOĞRULAMASI — "Kişi" tuzağı.** `App.tsx:438` kaydedilen
+      `display_name` alanına `peerAnnouncedName || "Kişi"` yazıyordu ve `:159`
+      onu **karşı tarafın gerçek adıymış gibi** geri okuyordu. Bu makinede
+      `history.sqlite3` gerçekten var (28 KB) — yani bir eşleşme yapılmış;
+      kuzenin veritabanında da "Kişi" yazıyor olabilir. Dart tarafı bunu
+      "bilinmiyor" sayıyor (migration gerekmiyor) ama **kanıtlanmalı**:
+      `mkvi_core` ile gerçek veritabanını açıp `peers()` çalıştıran tek seferlik
+      bir `cargo run`. Kaynak: `%APPDATA%\com.mkvi.desktop\history.sqlite3`, anahtar
+      Credential Manager'da `app.mkvi.desktop / history-key-v1`. *Bu aynı zamanda
+      çekirdek ayrımının gerçek veriye karşı ilk kanıtı olur.* Ağır derleme
+      olduğu için ajanlar bitince koşulacak.
 
 ## Faz 5 — Arama
 
