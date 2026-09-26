@@ -1,175 +1,220 @@
-# MKVI — bitirme yol haritası
+# MKVI — yol haritası
 
-> Bu dosya **kararların kalıcı kaydıdır**. Sıfır bağlamla açılan bir oturum, `CLAUDE.md`'deki
-> handoff'u okuduktan sonra buraya bakıp sıradaki kutuyu işaretleyerek devam edebilmelidir.
-> Bir madde bittiğinde `[ ]` → `[x]` yap ve altına tek satır kanıt yaz (komut çıktısı, commit).
+> Bu dosya projenin **kanonik planıdır**. Sıfır bağlamla açılan bir oturum önce
+> `docs/adr/` kararlarını, sonra burayı okuyup işaretlenmemiş ilk kutuya devam eder.
+> Kutu bitince `[x]` yap ve altına **tek satır kanıt** yaz (komut çıktısı, commit, test).
+> Mimari kararlar `docs/adr/`'de, mimari harita `ARCHITECTURE.md`'de.
 
-## Hedef (goal)
+## Hedef
 
-İki kişinin (sen + kuzenin) hesapsız, sunucuda içerik tutmayan, kurup unutacağı bir
+İki kişinin (sen + kuzenin) hesapsız, sunucuda içerik tutmayan, kurup unutacağın bir
 iletişim uygulaması. **"Bitti" tanımı:**
 
 - Windows'ta iki cihaz kurulumdan sonra **bir kez** kod girer, bir daha asla girmez.
-- Mesaj, dosya, sesli/görüntülü arama ve ekran paylaşımı çalışır.
-- Kimlik doğrulaması gerçekten uçtan uca güvenlidir (aradaki sunucu okuyamaz).
-- Güncellemeler kendiliğinden iner.
-- Android kararı verilmiş ve gerekçesi yazılmıştır.
+- Mesaj, dosya, sesli/görüntülü arama ve ekran paylaşımı gerçekten çalışır.
+- Kimlik doğrulaması uçtan uca güvenlidir (aradaki sunucu okuyamaz, **sunucu
+  korsanlığı da ifadeyi değiştiremez**).
+- Güncellemeler kendiliğinden iner ve imzayla doğrulanır.
+- Windows + macOS + Linux çalışır; Android ikinci hedeftir.
+- Herkes kendi sinyal sunucusunu kurabilir; MKVI kimseye hizmet vermez.
 
-## Durum (2026-07-27)
+## Depo düzeni
 
-**0.1.4 yayında ve indirilebilir** (CI `30222203504` yeşil, link 200 + `MZ`). Gate yeşil:
-`tsc` · 58 test · cargo 6/6 · worker dry-run. Sıradaki iş Faz 0'ın ikinci kutusu:
-kuzenle canlı deneme — özellikle **kapat-aç testi**, çünkü keyring düzeltmesinin gerçekten
-işe yaradığı yalnızca böyle anlaşılır.
+```
+mkvi/
+├── app/                 Flutter uygulaması — Windows → macOS/Linux → Android
+├── crates/
+│   ├── mkvi_core/       Tauri'dan bağımsız çekirdek (Ed25519, keyring, şifreli SQLite, dosya)
+│   └── mkvi_bridge/     flutter_rust_bridge yüzeyi (tek crate, iki platform)
+├── cloudflare/          Sinyalleşme sunucusu (Worker + 2 Durable Object) — dokunulmaz
+├── design/              tokens.json + generator + kontrast testi (tasarımın tek kaynağı)
+├── spike/               Hafta 0 go/no-go probu — port bittikten sonra SİLİNİR
+├── docs/adr/            Karar günlüğü
+├── src/, src-tauri/     0.1.x DONMUŞ hat — 0.2.0'den sonra SİLİNİR
+└── tool.ps1             Tek kapı: `.\tool.ps1 gate`
+```
 
----
+**Katman kuralı:** Dart yalnızca `mkvi_bridge` üzerinden Rust'a dokunur. `mkvi_core`
+Tauri bilmez. `cloudflare/` hiçbir şeyi bilmez.
 
-## Faz 0 — Yayın (her şeyin önünde)
+## Öğrenilenler — 0.1.4 gerçek cihazlarda denendi
 
-- [x] **0.1.4 yayınlandı.** CI run `30222203504` **success**. Link doğrulandı:
-      `http=200`, 3.804.705 bayt, `MZ` başlığı. `latest.json` → `version: 0.1.4`,
-      URL raw feed'i gösteriyor, **BOM yok**. Yayın workflow'u onarımı böylece CI'da doğrulandı.
-      **Kuzene gidecek link:**
-      `https://raw.githubusercontent.com/ancapenguin/mkvi-updates/main/windows-x86_64/MKVI_0.1.4_x64-setup.exe`
-      (SmartScreen uyarısı normaldir — imza sertifikası yok, bkz. Faz 7.)
-- [ ] **Kuzenle canlı dene ve sonucu yaz.** Tek teşhis verisi hangi ekranda takıldıkları.
-      Özellikle: uygulamayı kapat-aç, kod istemeden bağlanıyor mu? (keyring düzeltmesinin
-      gerçek testi budur.)
-- [ ] **Arayüzü gerçek pencerede gör.** İlerleme çubuğu, "Sen: <ad>" rozeti, arama sırasında
-      sohbetin yan panel olması. Tarayıcıda test edilemez (`loadDeviceIdentity` Tauri komutu).
+Bu on kusur **canlı testte** bulundu. Kaynak: kullanıcının canlı test raporu + her biri
+için dosya/satır düzeyinde kök neden analizi.
 
-## Faz 1 — Güvenlik açığını kapat (Android'den önce zorunlu)
+> **Durum sütunu dürüsttür: bu on kusurun hiçbirinde regresyon testi YOK.**
+> Doğrulandı: `src/services/peer-transport.test.ts` içindeki 27 testin **tamamı**
+> ayrıştırıcı/doğrulama (parseControl, safeName, safeMime, randomTransferId).
+> Çağrı durum makinesi, medya, müzakere, yeniden bağlanma, isim, bildirim ve kontrast
+> için **sıfır** test var. Bu yüzden aşağıdaki maddeler "kilitlendi" değil,
+> **taşınacak gerekliliklerdir**; her biri ilgili fazın çıkış koşulunda teste bağlanır.
 
-- [ ] **SAS'i DTLS parmak izine bağla.** Şu an ifade yalnızca
-      `transcript | sıralı açık anahtarlar` özeti (`src/App.tsx`, `handleIdentity`); SDP'yi ve
-      DTLS sertifika parmak izlerini kapsamıyor. Sinyalleşme sunucusunu kontrol eden biri araya
-      girip iki tarafa da **aynı ifadeyi** gösterebilir.
-      Yapılacak: `RTCPeerConnection.getStats()`'ten yerel/uzak DTLS parmak izlerini al, SAS
-      girdisine ekle, ve ifadeyi ancak parmak izleri belli olduktan sonra göster.
-      Kabul: parmak izi değiştirilmiş sahte bir eş ile ifadelerin **farklı** çıktığını gösteren
-      birim testi.
-- [ ] **Alternatif değerlendirildi mi:** `snow` (Noise) ile el sıkışıp SAS'i el sıkışma
-      özetinden türetmek daha temiz ama daha büyük iş. Önce yukarıdaki minimal bağlama yapılsın.
+| # | Kusur | Kök neden | Durum |
+|---|---|---|---|
+| 1 | Kamera ve ekran paylaşımı hiç çalışmıyor | Tauri hiçbir WebView2 izin handler'ı kaydetmiyor; wry `msWebOOUI`'yi kapatıyor. Tauri 2.11.5'te API yok | Kök neden Flutter'a geçişle **ortadan kalkıyor**; spike kanıtlıyor (bkz. `spike/`) |
+| 2 | Görüntülü arama isteği sessizce sesliye düşüyor | İzin reddi `getUserMedia` zincirinde sessizce yutuluyordu | Kodda kısmen düzeltildi (`e567276`), **testi yok** |
+| 3 | Cevap ekranı yok, arama direkt açılıyor | 0.1.4'te otomatik kabul vardı; cevap ekranı hiç yayımlanmamıştı | Kod **var** (`e567276`) ama kullanıcı hiç görmedi, **testi yok** |
+| 4 | Yazılar okunmuyor | 17 WCAG ihlali; en kötüsü video placeholder ışık temada **1.17:1**, odak halkası vurguyla aynı (**1.00**) | **Testi yok** — `design/` kontrast testi yazılıyor |
+| 5 | Ana sahne kendi kamerana sabit, karşı taraf 126 px'de | Kaynak seçimi `local-camera`'ya sabitlenmiş, uzak kamera gelince geçiş yok | Kodda kısmen düzeltildi, **testi yok** |
+| 6 | Sesliyken kamera açılamıyor, kaleyen kamerasını açamıyor | Hata Türkçe olmayan ham `DOMException` metniydi; `acceptCall` medyadan sonra geliyordu | Kodda kısmen düzeltildi, **testi yok** |
+| 7 | Takma ad, karşı tarafın gerçek adını eziyor | `App.tsx:119` → `peerAlias \|\| peerAnnouncedName`; ayrıca `ChatCallWorkspace.tsx:490` `aliasIsSet` tuzağı | **AÇIK** — bu satırlar hâlâ aynı, düzeltilmedi |
+| 8 | Sağ alt bildirimi gitmiyor, gönder tuşunu kapatıyor | 6 yerden ~saniyede bir yeniden yazılıyor, sayaç hiç dolmuyor; `z-index:100` yazarın üstünde | **AÇIK** — sayaç eklendi ama döngü yeniden yazmaya devam ediyor |
+| 9 | Kapat-aç geri bağlanmıyor, beyaz ekrana düşüyor | Bootstrap hatası "ilk kurulum" sanılıyor; Tauri IPC koruması yok; **keyring boşken sessizce yeni kimlik** üretiliyor | **AÇIK** — sessiz kimlik üretimi şu an `mkvi_core`'da kapatılıyor |
+| 10 | Güncelleme hiç çalışmıyor | `ancapenguin/mkvi-updates` deposu **404** veriyor (canlı doğrulandı) | **AÇIK** — Faz 7 |
 
-## Faz 2 — Sinyalleşme protokolünü sağlamlaştır
 
-Dört üretim hatasının üçü buradaydı. Kütüphane yok; alınacak olan **Magic Wormhole'un tasarımı**.
+## Verilmiş kararlar
 
-- [ ] **Kiralama (lease) modeline geç.** `cloudflare/src/index.ts:102` `disconnect()` `admitted`
-      sayacını azaltmıyor; `MAX_ADMISSIONS = 8` çözüm değil erteleme. Aynı fonksiyonda
-      `setAlarm` her girişte sıfırlandığı için "15 dakikalık tek kullanımlık kod" aslında
-      **kayan pencere**. Kabul: kapanan bağlantı yerini bırakıyor + kod oluşturulduktan
-      15 dk sonra kesin ölüyor, testle kilitlendi.
-- [ ] **Zarflara sıra numarası + onay (ack) ekle.** `src/services/rendezvous.ts`'te mesaj
-      kimliği, ack veya tekrar oynatma yok; iki taraf da "bağlı" görünürken kaybolan bir sinyal
-      hâlâ el sıkışmayı kilitleyebilir. Kabul: kaybolan zarfı simüle eden test.
-- [ ] **Tek kanonik tel sözleşmesi.** Rust, tarayıcı TS ve Worker aynı golden vector
-      dosyasından geçsin. Base64 alfabesi ve UUID formatı hataları tam olarak bunun
-      yokluğundan doğdu. Kabul: üç tarafta da çalışan ortak vektör dosyası.
-
-## Faz 3 — Profil fotoğrafı (onaylandı)
-
-- [ ] **Yerel seçim + küçültme.** `createImageBitmap` (EXIF yönünü kendi çözer) → canvas ile
-      256×256 merkez kırpma → **WebP** (JPEG geri dönüşlü). Yeniden kodlama EXIF/GPS'i
-      kendiliğinden siler; gizlilik gereği budur, ayrı EXIF kütüphanesi **alma**.
-- [ ] **Aktarım.** `profile` kontrol mesajı 32 KB sınırına takılır → `FILE_FRAME` desenine
-      benzer ayrı bir ikili nesne çerçevesi. `parseControl`'e ham base64 **gömme**.
-- [ ] **Saklama.** Şifreli SQLite'ta BLOB. Sunucuya hiçbir şey gitmez.
-
-## Faz 4 — Yerel veri sertleştirme
-
-- [ ] **SQLCipher'a geç.** `rusqlite`'ın bundled SQLCipher özelliği var. Şu anki uygulama
-      katmanı şifrelemesi journal/WAL verisini korumuyor. Anahtar OS kasasında kalır.
-      **Geçmiş şeması büyümeden yap.** Kabul: eski veritabanından geçiş yolu + test.
-
-## Faz 5 — Test altyapısı
-
-- [ ] **Playwright duman testi.** jsdom CSS grid geometrisini yakalayamaz — 0.1.3'teki bozuk
-      iki panelli düzeni ancak gerçek tarayıcı görürdü. Kabul: iki panelli düzen ve sayfa
-      kaymaması test ediliyor.
-- [ ] **Türkçe stringler için tipli katalog.** i18n kütüphanesi **alma**; tek dil için tipli
-      bir sabit nesne yeterli, ikinci dil gerekirse yeniden yazım gerektirmez.
-
-## Faz 6 — Android
-
-- [ ] **Kararı ver ve yaz.** Araştırmanın önerisi: **Android için Flutter + `flutter_webrtc` +
-      `flutter_rust_bridge`; Windows Tauri'de kalır; Rust çekirdeği çerçeveden bağımsız bir
-      crate'e çıkarılır.** Gerekçe: Android WebView'da `getDisplayMedia()` yok, ekran paylaşımı
-      MediaProjection ister ve native pikselleri WebView'ın `RTCPeerConnection`'ına bağlamanın
-      standart yolu yok — "küçük bir Kotlin eklentisi" ikinci bir WebRTC yığınına dönüşür.
-      Maliyet: TypeScript'in %0'ı taşınır, Rust mantığının ~%80-90'ı yaşar.
-      **Ucuz alternatif:** yalnızca ön planda çalışan, ekran paylaşımsız bir Tauri Android
-      denemesi 3-7 gün. Önce bu yapılıp gerçek cihazda görülebilir.
-- [ ] **Rust çekirdeğini crate'e çıkar** (karardan bağımsız olarak faydalı):
-      `load_identity` / `sign` / `open_history` / `store_message` / dosya yazımı Tauri
-      tiplerinden arındırılsın. `src-tauri/src/lib.rs` şu an `AppHandle` ile bağlı.
-- [ ] **TURN'ü yeniden değerlendir — yalnız bu fazda.** Mobilde CGNAT, simetrik NAT ve UDP
-      engelli kurumsal Wi-Fi yüzünden TURN pratikte zorunlu hale gelir. Masaüstü kararı
-      değişmedi. **Masaüstü için bu konuyu açma.**
-
-## Faz 7 — Dağıtım
-
-- [ ] **SmartScreen kararı.** Azure Artifact Signing ~9,99 USD/ay (5.000 imza).
-      **SignPath Foundation ücretsiz ama gerçek açık kaynak şartı var — repo private olduğu
-      için uygun değiliz.** sigstore SmartScreen'i değiştirmez. Karar kullanıcının.
+- [x] **Arayüz Flutter.** Tauri 0.1.x donduruldu. Kanıt ve riskler: `docs/adr/0001`.
+- [x] **Rust çekirdek korunur**, Tauri'den ayrılıp `mkvi_core` olur. Sinyalleşme
+      sunucusu **hiç değişmez**.
+- [x] **Lisans:** uygulama `Apache-2.0 OR MIT`; `cloudflare/` **AGPL-3.0** — kimse
+      bedava kamu sunucusu işletip markalı hizmet satamaz.
+- [x] **Varsayılan sunucu gömülmez.** Herkes kendi Worker'ını kurar; adresi ayarlara
+      yazar. Sebep: ücretsiz katmanda bir eşleşme ~115 GB-s DO süresi yiyor
+      (~110 eşleşme/gün), sonrası herkes için ölü; ayrıca keyfi kodla DO şişirme
+      mümkün ve **kimseye hizmet vermiyoruz**.
+- [x] **Tasarımın tek kaynağı `design/tokens.json`.** Kontrast testiyle kilitli;
+      özel vurgu rengi, sistem teması, yüksek kontrast, hareket azaltma desteklenir.
+- [x] **Güncelleme feed'i korunur** (resmi `latest.json` şeması + minisign imzası).
+      Yalnızca istemci değişir: indirme Dart'ta, **doğrulama Rust'ta**.
+- [x] **WebRTC sarmalayıcısı alınmaz.** simple-peer/PeerJS/werift bu projedeki
+      dört hatayı engellemedi; WebView2 zaten WebRTC içeriyordu. Flutter tarafında da
+      `flutter_webrtc` doğrudan kullanılır.
+- [x] **UI kütüphanesi, i18n, durum yönetimi alınmaz.** El yazması tema + `ChangeNotifier`.
+- [x] **Kullanıcı parolası yok.** "Kur, bir kez kod gir, bir daha asla" sözü korunur;
+      Android'de anahtar platform kasasında (`flutter_secure_storage`).
+- [x] **Kendi adını kullanıcı belirler**, `profile` mesajıyla karşıya gider. Takma ad
+      yalnız yerelde kalır ve asla gerçek adın yerini almaz.
 
 ---
 
-## Verilmiş kararlar (yeniden tartışma)
+## Faz 0 — Karar kapısı (Hafta 0)
 
-- [x] **WebRTC sarmalayıcısı ALINMAYACAK.** simple-peer / PeerJS / libdatachannel / werift
-      bu projede çıkan dört hatanın hiçbirini engellemezdi. WebView2 WebRTC'yi zaten içeriyor.
-- [x] **iroh ALINMAYACAK** (şimdilik). Uç nokta kimliği takasını yine bize bırakıyor,
-      çevrimdışı posta kutusu yok, medya WebRTC'de kalacağı için iki ayrı taşıma demek.
-      `iroh-blobs` yalnızca "dosya kaldığı yerden devam etsin" gerçek gereksinim olursa.
-- [x] **Matrix / Tailscale / libp2p / Veilid / Waku: hayır.** İlk ikisi hesap veya tailnet
-      ister, "hesapsız" premisini siler; diğerleri iki cihaz için fazla ağır.
-- [x] **UI kütüphanesi ALINMAYACAK.** Radix / shadcn / Mantine / i18next / Zustand — iki ekran
-      için hepsi gereksiz. El yazması CSS ve yerel HTML kontrolleri kalıyor.
-- [x] **TURN masaüstünde kapalı.** Yalnızca "ifade ekranı geldi ama bağlanmadı" gerçek
-      denemesiyle veya Android fazında açılır.
-- [x] **`mkvi-updates` deposu olduğu gibi kalacak** (her sürümde ~3,8 MB büyür).
-      `mkvi` public yapılmayacak, PAT eklenmeyecek.
-- [x] **Profil fotoğrafı yapılacak** (Faz 3).
-- [x] **Kendi adını kullanıcı belirler**, karşı tarafa `profile` mesajıyla gider; takma ad
-      yerelde kalır ve onu ezer.
+- [x] **Flutter spike derlemesi yeşil.** `flutter_webrtc 1.6.2+hotfix.3`,
+      `flutter build windows --release` → `mkvi_spike.exe`, **143 sn**,
+      libwebrtc `m150.7871.02` otomatik indi. Kanıt: `spike/README.md`.
+- [x] **Repo hijyeni.** `.gitattributes` (tek satır sonu kuralı), `.gitignore`
+      (Flutter + beyin katmanı), 15 MB ölü feed klonu silindi.
+- [x] **Karar günlüğü.** `docs/adr/0001-flutter-migration.md`.
+- [ ] **Spike gün 3-7: iki makinede gerçek arama.** Protokol ve **önceden sabitlenmiş
+      karar kuralı** `spike/README.md`'de. Sonuç buraya yazılacak.
+      *İnsan katılımı gerekiyor: iki cihazda elle deneme.*
+- [ ] **Avenox beyin kurulumu** (`avenoxai/avenoxbeyin` v3): `AGENTS.md` + skill'ler.
+      Beyin **çalışma hafızası**; bu dosya **kalıcı kararlar**. İkisi karışmaz.
 
-## Bitmiş işler
+**Çıkış koşulu:** spike karar kuralı "düz port" ya da "vendor fork" demezse Faz 1 başlamaz.
 
-- [x] **Yeniden bağlanma el sıkışması varlık olayına bağlandı** (`150cc6e`) — oda posta kutusu
-      tutmuyor, çevrimdışı tarafa atılan zarf çöpe gidiyordu.
-- [x] **Kimlik doğrulanmadan gelen sinyaller kuyruğa alınıyor** (`150cc6e`) — eskiden atılıyordu.
-- [x] **Cihaz anahtarı gerçek OS kasasına bağlandı** (`c411f48`) — `keyring 3` varsayılan
-      özelliksiz bellek içi mock store kullanıyordu; kimlik ve DB anahtarı hiç kalıcı değildi.
-- [x] **WebView2 "Suggestions" kapatıldı** (`c411f48`) — `generalAutofillEnabled: false`;
-      `autocomplete="off"` tek başına yetmiyor (Tauri şeması bunu açıkça yazıyor).
-- [x] **Dosya aktarımı ilerleme çubuğu** (`150cc6e`).
-- [x] **Mikrofonsuz cihazda arama düşmüyor** (`150cc6e`) — yalnız-video'ya geriliyor.
-- [x] **Yayın workflow'u onarıldı** (`150cc6e`) — `$env:VERSION` tanımsızdı, installer feed
-      reposuna hiç kopyalanmıyordu.
-- [x] **Worker'a ilk testler** (`150cc6e`) — 12 test, base64 alfabesi ve daraltma koruması.
+## Faz 1 — Çekirdek ve iskelet
+
+- [ ] **`crates/mkvi_core`:** `security.rs` Tauri'den ayrılır, sıfır Tauri bağımlılığı.
+- [ ] **Sessiz sır üretimi kapatılır.** Keyring boşsa ama diskte bir şey varsa **hata**
+      verir (`KeyringEntryMissing`), yeni kimlik üretmez. Yazma-okuma `debug_assert`.
+- [ ] **`crates/mkvi_bridge`:** `flutter_rust_bridge` yüzeyi, yedi işlev.
+- [ ] **`app/`** Flutter iskeleti, köprü tur testi (Windows'ta).
+- [ ] **Tek kapı:** `.\tool.ps1 gate` → `flutter analyze` · `dart test` ·
+      `cargo test` · `tsc` · `vitest` · `wrangler --dry-run`.
+- [ ] **CI** (`ci.yml`) bu kapıyı PR'da koşsun.
+
+**Çıkış koşulu:** `app/` açılıyor, Rust'tan bir değer okuyup Dart'ta gösteriyor, kapı yeşil.
+
+## Faz 2 — Tasarım sistemi ve kabuk
+
+- [ ] **`design/tokens.json`** → generator → `app/lib/ui`. 4 tema × 4 vurgu, tam rol
+      listesi, odak halkası vurgudan ayrık.
+- [ ] **Kontrast testi kapıda.** Her (tema, vurgu) çifti WCAG'ı geçmeli; 17 ihlal
+      geri gelemez.
+- [ ] **Ölçek/yoğunluk her yerde** (0.1.x'te `fontScale` ilk ekranlarda etkisizdi).
+- [ ] **Üç ekran:** eşleştirme, çalışma alanı, arama.
+
+**Çıkış koşulu:** `dart test` kontrast testleri yeşil; üç ekran tema/vurgu/ölçek
+kombinasyonlarında bozulmadan.
+
+## Faz 3 — Sinyalleşme
+
+- [ ] **`rendezvous` Dart'a taşınır**, zarf doğrulama ve ayrışma bildirimiyle.
+- [ ] **Ortak golden vector:** TS ve Dart aynı dosyadan aynı testi koşar. 0.1.x'teki
+      base64 alfabesi ve UUID biçimi hataları tam olarak bu eksiklikten doğdu.
+- [ ] **Worker sözleşme testleri** CI'da.
+
+## Faz 4 — Kimlik, eşleştirme, geri bağlanma
+
+- [ ] **Faz 1 güvenlik açığı kapatılır:** SAS ifadesi DTLS parmak izine bağlanır
+      (SDP'den veya `getStats`'ten — spike gün 3 hangisini verirse). Sinyal
+      sunucusunu kontrol eden biri artık iki tarafa da aynı ifadeyi gösteremez.
+- [ ] **`SetupState`:** ilkKurulum / yenidenBağlanıyor / bozuk. **Beyaz ekran yalnız ilk
+      kurulumda.**
+- [ ] **Keyring hataları yüzeye çıkar**, sessizce yeni kimleme düşmez.
+- [ ] **İsimler:** ilan edilen ad yetkili, takma ad ikincil ve yalnız yerelde;
+      yeniden eşleşmede "Kişi"ye düşme yok.
+
+## Faz 5 — Arama
+
+- [ ] **Cevap / Reddet** ekranı; **iki tarafta da** 45 sn zil zaman aşımı; cevapsız
+      arama kaydı; `call-declined` işlenir.
+- [ ] **Kabul medyadan önce** — diyalogun verdiği sözün tutulması.
+- [ ] **Kamera/mikrofon/ekran:** cihaz değiştirme, hata sınıflandırması (Türkçe),
+      **arama sırasında kamerayı açma**, sesli→görüntülü yükseltme.
+- [ ] **Ekran paylaşımı için "ilk kare bekleniyor" durumu.** Plugin sessizce boş
+      track verebiliyor (`#2137`); `outbound-rtp.framesEncoded` izlenmeli.
+- [ ] **PiP kendi görüntü + tam ekran**, uzak kamera gelince otomatik geçiş.
+
+## Faz 6 — Sohbet ve dosya
+
+- [ ] Mesaj listesi + geçmiş (şifreli SQLite), gönderme durumu.
+- [ ] Dosya aktarımı çekirdek üzerinden akışlı yazım, ilerleme, iptal, çakışma yok.
+
+## Faz 7 — Güncelleme, dağıtım, açık kaynak
+
+- [ ] **`mkvi_core::update`:** `latest.json` oku → sürüm karşılaştır → indir →
+      **imzayı doğrula** → kur. Doğrulama indirilen baytın **tamamı** üzerinde,
+      bayt bayt kontrolsüz geçilemez.
+- [ ] **`release.yml`:** etiketle tetiklenir, taslak yayın, sürüm üç dosyada eşleşmeli.
+- [ ] **Feed GitHub Releases'e taşınır** → `mkvi-updates` deposu ve deploy anahtarı
+      emekli. `ancapenguin/mkvi` **public** olunca updater endpoint'i
+      `releases/latest/download/latest.json` olur (resmi Tauri yöntemi).
+- [ ] **Public'a çıkış:** lisanslar, `SECURITY.md` (özel bildirim kanalıyla),
+      `CONTRIBUTING`, `CODE_OF_CONDUCT`, `THIRD-PARTY-NOTICES`, `cloudflare/README.md`.
+- [ ] **Yanlış iddialar düzeltilir:** README "tek kullanımlık kod" diyor (aslında kayan
+      pencere, `MAX_ADMISSIONS = 8`); CLAUDE "CSP daraltıldı" diyor (aslında `https:`
+      jokeri *genişletilmiş*); "0.1.4 indirilebilir" diyor (link ölü).
+
+**Çıkış koşulu:** 0.2.0 yayında, iki cihazda kendiliğinden güncelleniyor.
+
+## Faz 8 — Ölü kodun temizliği
+
+- [ ] **`spike/` silinir** (port bittikten sonra).
+- [ ] **`src/`, `src-tauri/` silinir** — 0.2.0 yayınlandı ve iki cihazda gerçek arama
+      + dosya aktarımı geçtikten **sonra**, tek commit'te. O güne kadar bunlar Dart
+      portunun **spesifikasyon kaynağıdır**; silinmez.
+- [ ] `index.html`, `vite.config.ts`, `tsconfig*`, `package.json` (kök) Tauri ile birlikte gider.
+
+## Faz 9 — Android
+
+- [ ] `keyring` Android'de yok → `flutter_secure_storage` beslemeli `SecretStore`.
+- [ ] Ekran paylaşımı **MediaProjection** ister; `getDisplayMedia` Android WebView
+      eşdeğeri değildir.
+- [ ] Kamera/mikrofon izin akışı ve kalıcı izin iptali.
 
 ---
 
-## Çalışma kuralları (bu projede acı çekilerek öğrenildi)
+## Çalışma kuralları (acıyla öğrenildi)
 
-- **Codex `sol` modeli yalnızca fikir alışverişi/araştırma içindir.** Mekanik kod lane'lerinde
-  `gpt-5.6-terra`, önemsiz işlerde `gpt-5.6-luna` kullan.
-- **Codex bu makinede MEVCUT DOSYAYI DÜZENLEYEMİYOR.** `apply_patch` Windows PowerShell
-  tırnaklamasında bozulup `Invalid patch: The last line of the patch must be '*** End Patch'`
-  veriyor. **Ama sıfırdan yeni dosya oluşturabiliyor.** Lane'lere yalnızca "yeni dosya yaz"
-  işi ver; mevcut dosya düzenlemesini Edit ile kendin yap. Sandbox'ı kapatmak bunu çözmez.
-- **Arka planda `codex exec` çalıştırırken `< /dev/null` şart**, yoksa stdin'de asılır.
-  `--full-auto` deprecated; `--sandbox workspace-write` veya `--sandbox read-only` kullan.
-- **Read-only araştırma lane'leri sorunsuz çalışıyor** ve web araması yapabiliyorlar.
-- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA — sadece Edit.** `Get-Content -Raw` Türkçeyi
-  ANSI okuyup mojibake yapar; `Set-Content -Encoding utf8` JSON'a BOM yazıp Tauri derlemesini
-  kırar. Kurtarma: `git checkout -- <dosya>`.
-- **Görünmez karakter içeren regex'i Edit ile yazma** — kod noktası karşılaştırması kullan
-  (bkz. `safeDisplayName`, `src/services/peer-transport.ts`).
-- **Lane raporu iddiadır, kanıt değil.** Bu oturumda üç lane'in üç iddiası da doğrulandı ama
-  daha önce bir lane sessizce yanlış kod üretmişti. Her iddiayı kodda veya resmî dokümanda
-  doğrula.
-- **Türkçe dosya düzenledikten sonra** `grep -n 'Ã\|Å\|Ä' <dosya>` çalıştır; çıktı boş olmalı.
-- **Tam gate:** `npx tsc --noEmit` · `npm test` · `cd src-tauri && cargo test` ·
-  `cd cloudflare && npm run check`. Dördü yeşil olmadan commit önerme.
+- **Tam kapı yeşil olmadan commit önerme:** `.\tool.ps1 gate`.
+- **DOSYA İÇERİĞİNİ ASLA PowerShell İLE YAZMA.** `Get-Content -Raw` Türkçeyi bozar,
+  `Set-Content -Encoding utf8` BOM yazar ve derlemeyi kırar. Kurtarma:
+  `git checkout -- <dosya>`. Bayt seviyesinde yamalar (ör. ham NUL → `\0`) istisnadır,
+  çünkü yeniden kodlama yapmaz.
+- **Türkçe metin UTF-8, BOM'suz.** Bir dosyayı düzenledikten sonra
+  `grep -n 'Ã\|Å\|Ä' <dosya>` çalıştır; çıktı boş olmalı.
+- **Kod yorumları İngilizce**, kullanıcıya görünen her string Türkçe.
+- **Worker içerik taşımaz.** `isSignalPayload` anahtar bazında beyaz liste kullanır.
+  Yeni alan eklemek Worker'ı içerik tüneline çevirir; gerekçesiz genişletme.
+- **Protokol daraltmak kırıcıdır.** `isSignalPayload`'dan alan çıkarmak, o alanı hâlâ
+  gönderen eski istemcileri `close(1008)` ile düşürür.
+- **Özel kripto yazma.** Yalnız denetimli crate'ler (`ed25519-dalek`,
+  `chacha20poly1305`). Yeni şema gerekiyorsa önce sor.
+- **Ajanlar commit atmaz, push atmaz.** Her dosyanın tek sahibi olur; sahiplik
+  çakışması iki ajanın işini birbirine ezdirir. Commit'i lead engineer yapar.
+- **Lane/ajan raporu iddiadır, kanıt değil.** Her iddia kodda veya resmî dokümanda
+  doğrulanır.
