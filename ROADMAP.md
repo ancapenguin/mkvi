@@ -177,8 +177,29 @@ kombinasyonlarında bozulmadan.
 
 ## Faz 5 — Arama
 
-- [ ] **Cevap / Reddet** ekranı; **iki tarafta da** 45 sn zil zaman aşımı; cevapsız
-      arama kaydı; `call-declined` işlenir.
+- [x] **Çağrı durum makinesi (saf Dart, donanımsız).** 110 test. Dört canlı kusur
+      testle kilitli: (1) cevap ekranı olmadan arama açılmıyor — `accept()` dışında
+      hiçbir yol `connected`'a gidemiyor; (2) **ara tarafta 45 sn zil zaman aşımı**
+      yoktu, diyalog sonsuza kadar kalıyor ve tuşlar kilitliydi; (3) `call-declined`
+      hiç işlenmiyordu, şimdi ayrı bir sonuç; (4) kaleye kabul medyadan önce
+      gidiyordu, artık `call-accept` **önce** gönderiliyor ve yarışta (arayan
+      zaman aşımına uğradıysa) kabul reddediliyor.
+      Sipariş sözleşmesi veri olarak modellendi: `accept` → `[SendFrame, PublishMedia]`.
+      Sesli→görüntülü yükseltme yeni çağrı ve yeni müzakere üretmiyor.
+- [ ] **`stopCall` rastgele id gönderiyor (yeni bulundu).**
+      `peer-transport.ts:203`: `activeCallId ?? pending ?? incoming ?? randomTransferId()`
+      — hiç çağrı yokken **hiçbir çağrıya ait olmayan rastgele bir id ile**
+      `call-end` gönderiyor. Karşı taraf bu id'yi bilmediği için `finishCallRequest`
+      çalışmıyor, sonra `stopCall(false)` ve `remote-call-ended` yayıyor: yani
+      **kimsenin kapatmadığı bir arama, karşı tarafın kendi medyasını düşürüyor.**
+      Dart tarafında `end()` canlı çağrı yoksa saf no-op; donmuş hatta düzeltilmedi.
+- [ ] **`remote-stream` yanlış sinyalle `connected`'a atıyor (yeni bulundu).**
+      `App.tsx:399`: `outgoing` sırasında gelen bir `remote-stream` doğrudan
+      `connected` yapıyor, `onStartCall`'in koyduğu `connecting` durumunu atlayarak.
+      Dart makinesinde `connected`'a giden tek kapı `onMediaReady()`.
+
+- [ ] **Cevap / Reddet** ekranı; iki tarafta da 45 sn zil zaman aşımı; cevapsız
+      arama kaydı; `call-declined` işlenir. *(Durum makinesi tamam; ekran kaldı.)*
 - [ ] **Kabul medyadan önce** — diyalogun verdiği sözün tutulması.
 - [ ] **Kamera/mikrofon/ekran:** cihaz değiştirme, hata sınıflandırması (Türkçe),
       **arama sırasında kamerayı açma**, sesli→görüntülü yükseltme.
