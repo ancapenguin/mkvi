@@ -53,8 +53,9 @@ spike/.flutter-plugins
 spike/.flutter-plugins-dependencies
 
 # --- Avenox second brain -----------------------------------------------------
-# Beyin lead engineer'in YEREL hafizasidir; public repoya hicbir parcasi giremez.
-# Kalici kararlar public olarak docs/adr/ ve ROADMAP.md'de yasar, hafiza degil.
+# Beyin KOD DEPOSUNUN DISINDA yasar: mkvi/ yanindaki mkvi-beyin/ klasorunde.
+# Buraya tekrar kurulmamasi icin guvenlik agi: kendi dosyalari asla izlenmesin.
+# (Beyin vault'ta kalir; calisma hafizasi ve kurallar proje kodundan ayridir.)
 .beyin-version
 .beyin-runtime.json
 .beyin-state/
@@ -71,17 +72,9 @@ Beyni Guncelle.sh
 Beyni Guncelle.command
 Beyni Guncelle.desktop
 
-# Ajan calisma zamani: skill'ler, hook'lar, script'ler. proje kodu degil.
+# Ajan calisma zamani artik bu depoda degil; kalinti dosyalar izlenmez.
 CLAUDE.md
-.claude/scripts/
-.claude/skills/
-.claude/hooks.json
-.claude/settings.local.json
-.claude/hermes-plugin/
+.claude/
 .codex/
 .omp/
 .opencode/plugins/
-
-# .claude/settings.json ajan izin listesi icerir (hangi komutlar calistirilabilir);
-# proje yapilandirmasi degil, kullanici ayari. Git'ten cikarildi.
-.claude/settings.json

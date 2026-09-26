@@ -286,7 +286,23 @@ switch ($Task) {
     }
 
     'spike' {
-        if (-not (Test-Exists 'spike')) { Write-Host 'spike/ klasoru yok.' -ForegroundColor Red; exit 1 }
+        # Iskelet kalici degil: spike/ altinda yalnizca README.md durur, iki
+        # komutla geri olusur. O olmadigi icin "yok" demiyoruz, nasil
+        # olusturulacagini soyluyoruz.
+        if (-not (Test-Exists 'spike\README.md')) {
+            Write-Host 'spike/ yok. Olusturmak icin:' -ForegroundColor Yellow
+            Write-Host '  flutter create spike --platforms=windows --org dev.mkvi --project-name mkvi_spike' -ForegroundColor Yellow
+            Write-Host '  cd spike; flutter pub add flutter_webrtc' -ForegroundColor Yellow
+            break
+        }
+        if (-not (Test-Exists 'spike\pubspec.yaml')) {
+            Write-Host 'spike iskeleti silinmis (yalnizca README.md var).' -ForegroundColor Yellow
+            Write-Host 'Olusturmak icin:' -ForegroundColor Yellow
+            Write-Host '  flutter create spike --platforms=windows --org dev.mkvi --project-name mkvi_spike' -ForegroundColor Yellow
+            Write-Host '  cd spike; flutter pub add flutter_webrtc' -ForegroundColor Yellow
+            Write-Host 'Ayrinti: spike/README.md' -ForegroundColor DarkGray
+            break
+        }
         if (-not (Test-Resources)) { Show-Summary; break }
         Invoke-Check -Name 'spike derlemesi (release)' -WorkDir 'spike' -Command @('flutter', 'build', 'windows', '--release')
         Show-Summary
