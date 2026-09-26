@@ -261,7 +261,10 @@ switch ($Task) {
         # 4) Flutter uygulamasi
         if (Test-Exists 'app') {
             Invoke-Check -Name 'flutter analyze (app)' -WorkDir 'app' -Command @('flutter', 'analyze', '--no-pub')
-            Invoke-Check -Name 'dart test (app)' -WorkDir 'app' -Command @('flutter', 'test')
+            # `flutter test`, not `dart test`: the app is a Flutter package and
+            # `package:test` is not in its dependency graph, so `dart test`
+            # cannot run there at all. Same runner the CI job uses.
+            Invoke-Check -Name 'flutter test (app)' -WorkDir 'app' -Command @('flutter', 'test')
         } else { Add-Result 'flutter test (app)' 'ATLANDI' '(app/ yok)' }
 
         # 5) Tasarim sistemi
