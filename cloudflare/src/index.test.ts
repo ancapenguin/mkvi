@@ -21,6 +21,19 @@ describe("identity envelopes", () => {
     expect(isSignalPayload({ kind: "identity", publicKey: urlSafeKey, signature: urlSafeSignature })).toBe(true);
   });
 
+  it("accepts a base64url reconnect session without breaking legacy identities", () => {
+    const session = `${"c".repeat(41)}-_`;
+    expect(isSignalPayload({ kind: "identity", publicKey: standardKey, signature: standardSignature })).toBe(true);
+    expect(isSignalPayload({ kind: "identity", publicKey: standardKey, signature: standardSignature, session })).toBe(true);
+    expect(isRelayEnvelope(relay({ kind: "identity", publicKey: standardKey, signature: standardSignature, session }))).toBe(true);
+  });
+
+  it("rejects malformed reconnect sessions", () => {
+    for (const session of ["c".repeat(42), "c".repeat(44), `${"c".repeat(42)}+`, `${"c".repeat(42)}/`, 7, null]) {
+      expect(isSignalPayload({ kind: "identity", publicKey: standardKey, signature: standardSignature, session })).toBe(false);
+    }
+  });
+
   it("rejects wrong key and signature lengths", () => {
     for (const key of ["a".repeat(42), "a".repeat(44), ""]) {
       expect(isSignalPayload({ kind: "identity", publicKey: key, signature: standardSignature })).toBe(false);

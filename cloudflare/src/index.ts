@@ -126,9 +126,10 @@ export function isSignalPayload(value: unknown): boolean {
     return keys.length === 2 && keys.includes("sdp") && typeof payload.sdp === "string" && payload.sdp.length > 0 && payload.sdp.length <= 32_768;
   }
   if (payload.kind === "identity") {
-    return keys.every((key) => key === "kind" || key === "publicKey" || key === "signature")
+    return keys.every((key) => key === "kind" || key === "publicKey" || key === "signature" || key === "session")
       && typeof payload.publicKey === "string" && KEY_B64.test(payload.publicKey)
-      && typeof payload.signature === "string" && SIGNATURE_B64.test(payload.signature);
+      && typeof payload.signature === "string" && SIGNATURE_B64.test(payload.signature)
+      && (payload.session === undefined || (typeof payload.session === "string" && OPAQUE_ID.test(payload.session)));
   }
   if (payload.kind !== "ice" || keys.length !== 2 || !keys.includes("candidate") || typeof payload.candidate !== "object" || payload.candidate === null || Array.isArray(payload.candidate)) return false;
   const candidate = payload.candidate as Record<string, unknown>;
