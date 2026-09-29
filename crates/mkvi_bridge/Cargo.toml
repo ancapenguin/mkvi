@@ -28,7 +28,7 @@ flutter_rust_bridge = "=2.13.0"
 # The signing wire format. `public_key_base64` and the signatures the Tauri
 # shell already exchanged are unpadded standard base64, and the peer protocol
 # cannot be changed by the Flutter port, so the same engine is used here.
-base64 = "0.22"
+base64 = "0.23"
 
 [dev-dependencies]
 tempfile = "3"
