@@ -362,7 +362,9 @@ void main() {
       expect(committed.existsSync(), isTrue,
           reason: 'lib/generated/tokens.g.dart is missing. Run: dart run tool/generate_tokens.dart');
 
-      final temp = File('${Directory.systemTemp.path}'
+      // Separator is explicit: systemTemp has no trailing slash, and on Linux
+      // the bare concatenation pointed at an unwritable '/tmpmkvi_...' path.
+      final temp = File('${Directory.systemTemp.path}${Platform.pathSeparator}'
           'mkvi_tokens_check_${pid}_$counter.g.dart');
       counter++;
       try {
