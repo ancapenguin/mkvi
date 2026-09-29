@@ -165,19 +165,27 @@ kuralları: `ROADMAP.md` — işaretlenmemiş ilk kutu sıradaki iştir.**
 > ⚠️ **BU BÖLÜM TEK OTURUM BLOĞU İÇERİR. Yeni handoff yazarken eski tarihli bloğu SİL,
 > ÜSTÜNE EKLEME. >1 tarihli blok görürsen fazlasını SİL.**
 
-### 2026-09-26
+### 2026-09-29
 
 **Bu blok kısadır çünkü plan `ROADMAP.md`'de.** Oturuma şöyle başla: `git status` +
 `git log --oneline -10`, sonra **`ROADMAP.md`'yi aç ve işaretlenmemiş ilk kutudan devam et.**
 
-**İLK İŞ:** `app/lib/main.dart`'ı gerçek kabuğa bağla. `SettingsController` →
-`SessionController` → `ChatController` + `CallMachine` + `MediaController` +
-`UpdateClient` sırasıyla bir `AppShell` içinde, tema `AppearanceStyle` ile uygulanarak.
-`main.dart` şu an tek satır `MyApp` şablonu ve on katman hiçbir yerde birbirine bağlı değil.
+**Depo public oldu (2026-09-29).** Temizlenmiş geçmiş force-push edildi (`243740e`), GitHub'daki
+`MKVI 0.1.2` release'ı ve `v0.1.0`–`v0.1.4` tag'leri silindi, uzakta yalnız `main` var. Kapı
+push'tan hemen önce yeşildi (14 geçti). `Documents\mkvi` eski geçmişi taşıyan dizin silinip
+GitHub'dan temiz klonla değiştirildi; `.secrets/` ve `app/android/local.properties` taşındı.
 
-**Yedek alındı:** `Documents\mkvi-private-backup-2026-09-26\` — tam geçmiş `git bundle`
-(doğrulandı) + 1204 dosyalık çalışma ağacı + `.secrets/`. 0.1.x hattı silinmeden önce
-buradan geri alınabilir.
+**İLK İŞ:** `ROADMAP.md` Faz 0.5 → **P0.1 sahiplik tablosu.** `main.dart`'ı bağlamak (P0.9)
+**önce yapılmaz**: taşıma ve depolama arayüzlerinin üretim implementasyonu sıfır, kabuk bağlansa
+da iki cihaz arasında mesaj gitmez.
+
+**Android** (kullanıcı 2026-09-29 istedi, sırası belli): Faz 0.5 bitip iki Windows cihaz
+konuşunca Faz 9. Flutter kodu aynı kalır; iş anahtar kasası, Rust'ın NDK derlemesi,
+MediaProjection ve izin akışı.
+
+**Yedek:** `Documents\mkvi-private-backup-2026-09-26\` — 0.1.x dahil tam geçmiş `git bundle`
+(salt-okunur, ASLA üzerine yazma). **Sınır:** GitHub eski commit'leri fork ağında bir süre
+tutabilir; "tamamen silindi" denmez, birkaç hafta sonra yeniden ölçülür.
 
 **Doğrulanmamış olanlar (iddia etme):** hiçbir test gerçek kamera/mikrofon/ekran/bağlantı
 görmedi — donanım yoktu, testler dikişleri sürüyor. `docs/manual-test.md`'deki gün 3-7 elle
