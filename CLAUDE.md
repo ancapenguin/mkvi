@@ -179,9 +179,12 @@ GitHub'dan temiz klonla değiştirildi; `.secrets/` ve `app/android/local.proper
 **önce yapılmaz**: taşıma ve depolama arayüzlerinin üretim implementasyonu sıfır, kabuk bağlansa
 da iki cihaz arasında mesaj gitmez.
 
-**Android** (kullanıcı 2026-09-29 istedi, sırası belli): Faz 0.5 bitip iki Windows cihaz
-konuşunca Faz 9. Flutter kodu aynı kalır; iş anahtar kasası, Rust'ın NDK derlemesi,
-MediaProjection ve izin akışı.
+**Kullanıcının hedefi (2026-09-29):** GitHub Release'den Windows kurulumu + Android APK alıp
+**Windows ↔ Android mesajlaşmayı** denemek; otomatik güncelleme de çalışsın. Bugün engel derleme
+değil: mesaj taşıyan kod yok. Sıra: (1) Faz 0.5 (P0.1 → P0.9) · (2) paralel: `release.yml`'e
+Android işi (APK, Rust NDK derlemesi, anahtar kasası; ROADMAP Faz 9) · (3) imzalama + `latest.json`
+(`release.yml` TODO'ları) · (4) `v0.2.0` tag → iki kurulum dosyası. Tag atmak (4) bunlardan önce
+sayaç uygulaması yayınlar, yapılmaz.
 
 **Yedek:** `Documents\mkvi-private-backup-2026-09-26\` — 0.1.x dahil tam geçmiş `git bundle`
 (salt-okunur, ASLA üzerine yazma). **Sınır:** GitHub eski commit'leri fork ağında bir süre
