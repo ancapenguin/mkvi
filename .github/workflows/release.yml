@@ -31,7 +31,7 @@ jobs:
     outputs:
       version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Etiket ile dosya sürümü ayrışırsa yayın yanlış sürümle başlar ve bu
       # sessizce olur. 0.2.0'ın `currentVersion`'ı 0.1.4'lük bir beslemeyi
@@ -57,7 +57,7 @@ jobs:
     needs: surum-denetimi
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable

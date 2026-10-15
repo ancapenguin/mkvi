@@ -28,7 +28,7 @@ jobs:
     name: Sürüm tutarlılığı
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Sürümün dört kaynağı aynı sayıyı göstermeli: VERSION, app/pubspec.yaml,
       # crates/mkvi_core, crates/mkvi_bridge. 2026-09-26'da ölçüldü: VERSION 0.2.0
@@ -45,7 +45,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
 
       # mkvi_core'in `rusqlite`'i bundled SQLite derler, yani C derleyicisi ister.
@@ -74,7 +74,7 @@ jobs:
     name: Tasarım kontrastı
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dart-lang/setup-dart@v1
 
       # `design/` bilinçli olarak Flutter'sız saf Dart paketidir: kontrast kapısı
@@ -97,7 +97,7 @@ jobs:
     name: Flutter uygulaması
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Kanal kasıtlı olarak sabitlenir. Sürümü kilitlemek, kapının "şu anda
       # bende geçiyor, sizde kırılır" hatasını üretir.
@@ -124,7 +124,7 @@ jobs:
     name: Sinyalleşme Worker'ı
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: 22
