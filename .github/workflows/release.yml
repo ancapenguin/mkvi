@@ -126,7 +126,7 @@ jobs:
           }
 
       - name: GitHub Release yayınla
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ${{ needs.surum-denetimi.outputs.version }}
           draft: true
