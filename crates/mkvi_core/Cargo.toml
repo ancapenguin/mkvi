@@ -15,7 +15,7 @@ crate-type = ["rlib"]
 [dependencies]
 base64 = "0.22"
 chacha20poly1305 = "0.10"
-ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+ed25519-dalek = { version = "3.0", features = ["rand_core"] }
 # Pure minisign signature verification for the future self-updater. No network,
 # no async: the download stays the host's job.
 minisign-verify = "0.3"
